@@ -1,0 +1,10 @@
+/* STREAMING_CHUNK:Injecting Tailwind directives... */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    body {
+        @apply bg-slate-100;
+    }
+}
