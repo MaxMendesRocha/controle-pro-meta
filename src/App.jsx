@@ -719,6 +719,13 @@ const JornadasTrabalho = () => {
 
 const ControlePonto = () => {
   const { db, refreshData, showToast } = useAppContext();
+  
+  // Função auxiliar para pegar a data de hoje no fuso local (caso não tenha exportado do App)
+  const getTodayLocal = () => {
+    const tzoffset = (new Date()).getTimezoneOffset() * 60000;
+    return (new Date(Date.now() - tzoffset)).toISOString().split('T')[0];
+  };
+
   const [date, setDate] = useState(getTodayLocal());
   const [selectedFuncId, setSelectedFuncId] = useState('');
   const [editingId, setEditingId] = useState(null);
@@ -726,6 +733,13 @@ const ControlePonto = () => {
   const [records, setRecords] = useState({
     entrada1: '', saida1: '', entrada2: '', saida2: '', obs: ''
   });
+
+  const setTimeNow = (field) => {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2, '0');
+    const m = String(now.getMinutes()).padStart(2, '0');
+    setRecords(prev => ({ ...prev, [field]: `${h}:${m}` }));
+  };
 
   const formatarTempo = (minutos) => {
     const h = Math.floor(minutos / 60);
@@ -823,53 +837,97 @@ const ControlePonto = () => {
     setRecords({ entrada1: '', saida1: '', entrada2: '', saida2: '', obs: '' });
   };
 
+  const renderTimeInput = (label, field) => (
+    <div className="flex flex-col space-y-1">
+      <div className="flex justify-between items-center">
+        <label className="text-sm font-medium text-slate-700">{label}</label>
+        <button 
+          type="button"
+          onClick={() => setTimeNow(field)}
+          className="text-[11px] uppercase tracking-wider font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded hover:bg-indigo-100 transition-colors"
+        >
+          Agora
+        </button>
+      </div>
+      <input 
+        type="time" 
+        value={records[field]} 
+        onChange={e => setRecords({...records, [field]: e.target.value})}
+        className="w-full px-3 py-3 border border-slate-300 rounded-lg text-lg text-center font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm transition-all"
+      />
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-800">Controle de Ponto</h1>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-1 space-y-4 h-fit">
-          <div className="flex justify-between items-center border-b pb-2">
-            <h3 className="font-semibold text-lg text-slate-800">
-              {editingId ? 'Editar Registro' : 'Registrar Manual'}
+        <Card className="lg:col-span-1 space-y-5 h-fit bg-slate-50 border-2">
+          <div className="flex justify-between items-center border-b border-slate-200 pb-3">
+            <h3 className="font-bold text-lg text-slate-800">
+              {editingId ? 'Editar Registro' : 'Lançamento Manual'}
             </h3>
             {editingId && <button onClick={cancelarEdicao} className="text-sm text-slate-500 hover:text-slate-700 font-medium">Cancelar</button>}
           </div>
 
-          <Select label="Funcionário" value={selectedFuncId} onChange={(e) => setSelectedFuncId(e.target.value)} options={[{ label: 'Selecione...', value: '' }, ...db.funcionarios.map(f => ({ label: f.nome, value: f.id }))]} />
-          <Input label="Data do Registro" type="date" value={date} onChange={e => setDate(e.target.value)} />
-          
-          <div className="grid grid-cols-2 gap-3 pt-2">
-            <Input label="Entrada" type="time" value={records.entrada1} onChange={e => setRecords({...records, entrada1: e.target.value})} />
-            <Input label="Saída Intervalo" type="time" value={records.saida1} onChange={e => setRecords({...records, saida1: e.target.value})} />
-            <Input label="Retorno Intervalo" type="time" value={records.entrada2} onChange={e => setRecords({...records, entrada2: e.target.value})} />
-            <Input label="Saída Final" type="time" value={records.saida2} onChange={e => setRecords({...records, saida2: e.target.value})} />
-          </div>
+          <Select 
+            label="Funcionário" 
+            value={selectedFuncId} 
+            onChange={(e) => setSelectedFuncId(e.target.value)} 
+            options={[{ label: 'Selecione...', value: '' }, ...db.funcionarios.map(f => ({ label: f.nome, value: f.id }))]} 
+          />
           
           <div className="flex flex-col space-y-1">
+            <div className="flex justify-between items-center">
+              <label className="text-sm font-medium text-slate-700">Data do Registro</label>
+              <button 
+                type="button"
+                onClick={() => setDate(getTodayLocal())}
+                className="text-[11px] uppercase tracking-wider font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded hover:bg-indigo-100 transition-colors"
+              >
+                Hoje
+              </button>
+            </div>
+            <input 
+              type="date" 
+              value={date} 
+              onChange={e => setDate(e.target.value)}
+              className="w-full px-3 py-3 border border-slate-300 rounded-lg text-lg text-center focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm"
+            />
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4 pt-2">
+            {renderTimeInput("Entrada", "entrada1")}
+            {renderTimeInput("Saída Int.", "saida1")}
+            {renderTimeInput("Retorno Int.", "entrada2")}
+            {renderTimeInput("Saída Final", "saida2")}
+          </div>
+          
+          <div className="flex flex-col space-y-1 pt-2">
              <label className="text-sm font-medium text-slate-700">Observações</label>
-             <textarea className="px-3 py-2 border border-slate-300 rounded-lg text-sm" rows="2" value={records.obs} onChange={e => setRecords({...records, obs: e.target.value})}></textarea>
+             <textarea className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white shadow-sm focus:ring-2 focus:ring-indigo-500" rows="2" value={records.obs} onChange={e => setRecords({...records, obs: e.target.value})} placeholder="Atrasos, atestados, etc..."></textarea>
           </div>
 
-          <div className="flex space-x-2 pt-2">
+          <div className="flex space-x-2 pt-4 border-t border-slate-200">
             {editingId && <Button className="flex-1 justify-center" variant="secondary" onClick={cancelarEdicao}>Cancelar</Button>}
-            <Button className="flex-1 justify-center" icon={editingId ? CheckCircle : Clock} onClick={handleSavePonto}>{editingId ? 'Atualizar' : 'Salvar Registro'}</Button>
+            <Button className="flex-1 justify-center py-3 text-lg shadow-md hover:shadow-lg transition-shadow" icon={editingId ? CheckCircle : Clock} onClick={handleSavePonto}>{editingId ? 'Atualizar' : 'Salvar Registro'}</Button>
           </div>
         </Card>
 
         <Card className="lg:col-span-2 p-0 overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+          <div className="p-4 border-b border-slate-200 bg-white flex justify-between items-center">
             <h3 className="font-semibold text-slate-800">Últimos Registros</h3>
           </div>
-          <div className="flex-1 overflow-x-auto p-0">
+          <div className="flex-1 overflow-x-auto p-0 bg-white">
              <table className="w-full text-left text-sm text-slate-600 min-w-[700px]">
-                <thead className="bg-slate-100 text-slate-700 font-medium sticky top-0">
+                <thead className="bg-slate-50 text-slate-700 font-medium sticky top-0 border-b border-slate-200">
                   <tr>
                     <th className="px-4 py-3 whitespace-nowrap">Data</th>
                     <th className="px-4 py-3 whitespace-nowrap">Funcionário</th>
                     <th className="px-4 py-3 text-center whitespace-nowrap">Entrada</th>
                     <th className="px-4 py-3 text-center whitespace-nowrap">Intervalo</th>
                     <th className="px-4 py-3 text-center whitespace-nowrap">Saída</th>
-                    <th className="px-4 py-3 text-center whitespace-nowrap">Extra/Falta</th>
+                    <th className="px-4 py-3 text-center whitespace-nowrap">Saldo do Dia</th>
                     <th className="px-4 py-3 text-right whitespace-nowrap">Ações</th>
                   </tr>
                 </thead>
@@ -880,18 +938,18 @@ const ControlePonto = () => {
                       <tr key={p.id || i} className={`hover:bg-slate-50 transition-colors ${editingId === p.id ? 'bg-indigo-50' : ''}`}>
                         <td className="px-4 py-3 whitespace-nowrap">{formatDate(p.data)}</td>
                         <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{func ? func.nome : 'Desconhecido'}</td>
-                        <td className="px-4 py-3 text-center font-mono bg-green-50">{p.entrada1 || '-'}</td>
+                        <td className="px-4 py-3 text-center font-mono bg-emerald-50/50">{p.entrada1 || '-'}</td>
                         <td className="px-4 py-3 text-center font-mono text-slate-500 whitespace-nowrap">{p.saida1 || '-'} / {p.entrada2 || '-'}</td>
-                        <td className="px-4 py-3 text-center font-mono bg-orange-50">{p.saida2 || '-'}</td>
+                        <td className="px-4 py-3 text-center font-mono bg-orange-50/50">{p.saida2 || '-'}</td>
                         <td className="px-4 py-3 text-center whitespace-nowrap">{calcularSaldoDiario(p)}</td>
                         <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
-                          <button onClick={() => handleEdit(p)} className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors rounded hover:bg-indigo-50" title="Editar"><Edit2 size={16} /></button>
-                          <button onClick={() => handleDelete(p.id)} className="p-1.5 text-slate-400 hover:text-red-600 transition-colors rounded hover:bg-red-50" title="Excluir"><Trash2 size={16} /></button>
+                          <button onClick={() => handleEdit(p)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors rounded-full hover:bg-indigo-50" title="Editar"><Edit2 size={16} /></button>
+                          <button onClick={() => handleDelete(p.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors rounded-full hover:bg-red-50" title="Excluir"><Trash2 size={16} /></button>
                         </td>
                       </tr>
                     );
                   })}
-                  {db.pontos.length === 0 && <tr><td colSpan="7" className="px-4 py-8 text-center text-slate-400">Nenhum registro de ponto encontrado.</td></tr>}
+                  {db.pontos.length === 0 && <tr><td colSpan="7" className="px-4 py-12 text-center text-slate-400 bg-slate-50">Nenhum registro de ponto encontrado.</td></tr>}
                 </tbody>
              </table>
           </div>
