@@ -961,11 +961,29 @@ const ControlePonto = () => {
 
 const FolhaPagamento = () => {
   const { db, showToast } = useAppContext();
+  
+  // Função auxiliar para calcular o período padrão (26 do mês passado a 25 do mês atual)
+  const getPeriodoPadrao = () => {
+    const hoje = new Date();
+    let anoAtual = hoje.getFullYear();
+    let mesAtual = hoje.getMonth() + 1; // 1 a 12
+    let mesAnterior = mesAtual - 1;
+    let anoAnterior = anoAtual;
+
+    if (mesAnterior === 0) {
+      mesAnterior = 12;
+      anoAnterior -= 1;
+    }
+
+    const dataIni = `${anoAnterior}-${String(mesAnterior).padStart(2, '0')}-26`;
+    const dataFim = `${anoAtual}-${String(mesAtual).padStart(2, '0')}-25`;
+    return { dataIni, dataFim };
+  };
+
+  const periodoPadrao = getPeriodoPadrao();
   const [selectedFuncId, setSelectedFuncId] = useState('');
-  const [mesAno, setMesAno] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  });
+  const [dataInicio, setDataInicio] = useState(periodoPadrao.dataIni);
+  const [dataFim, setDataFim] = useState(periodoPadrao.dataFim);
   
   const [calculoRealizado, setCalculoRealizado] = useState(null);
 
@@ -977,20 +995,19 @@ const FolhaPagamento = () => {
   };
 
   const processarFolha = () => {
-    if (!selectedFuncId || !mesAno) return showToast('Selecione funcionário e mês', 'error');
+    if (!selectedFuncId || !dataInicio || !dataFim) return showToast('Preencha funcionário e período', 'error');
+    if (dataInicio > dataFim) return showToast('A data de início deve ser anterior à data final', 'error');
 
     const funcionario = db.funcionarios.find(f => f.id === selectedFuncId);
     const jornada = db.jornadas.find(j => j.funcionarioId === selectedFuncId);
     const salarioBase = Number(funcionario.salario) || 0;
     
     if (!jornada) return showToast('Funcionário sem jornada cadastrada', 'error');
-
-    const [year, month] = mesAno.split('-');
     
-    const pontosMes = db.pontos.filter(p => {
+    // Filtra considerando o range de datas
+    const pontosPeriodo = db.pontos.filter(p => {
       if(p.funcionarioId !== selectedFuncId) return false;
-      const [pYear, pMonth] = p.data.split('-');
-      return pYear === year && pMonth === month;
+      return p.data >= dataInicio && p.data <= dataFim;
     });
 
     const weeklyHrs = calculateWeeklyHours(jornada);
@@ -1004,7 +1021,7 @@ const FolhaPagamento = () => {
 
     const diasMapa = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
 
-    pontosMes.forEach(p => {
+    pontosPeriodo.forEach(p => {
       const e1 = p.entrada1 ? timeToMinutes(p.entrada1) : null;
       const s1 = p.saida1 ? timeToMinutes(p.saida1) : null;
       const e2 = p.entrada2 ? timeToMinutes(p.entrada2) : null;
@@ -1071,12 +1088,12 @@ const FolhaPagamento = () => {
     const liquido = salarioBase + valorHE50 + valorHE100 - valorFaltas - INSS;
 
     setCalculoRealizado({
-      funcionario, mesAno, salarioBase, valorHora, 
+      funcionario, dataInicio, dataFim, salarioBase, valorHora, 
       monthlyHrsMinutos: monthlyHrs * 60,
       totalMinutosExtras50, valorHE50, 
       totalMinutosExtras100, valorHE100,
       totalMinutosFalta, valorFaltas, INSS, liquido,
-      qtdRegistros: pontosMes.length
+      qtdRegistros: pontosPeriodo.length
     });
     showToast('Cálculo gerado com sucesso!');
   };
@@ -1085,16 +1102,26 @@ const FolhaPagamento = () => {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-800">Folha de Pagamento</h1>
 
-      <Card className="flex flex-wrap gap-4 items-end bg-slate-50 border-dashed border-2">
-        <Select 
-            label="Funcionário" 
-            className="w-full md:w-64"
-            value={selectedFuncId} 
-            onChange={(e) => setSelectedFuncId(e.target.value)}
-            options={[{ label: 'Selecione...', value: '' }, ...db.funcionarios.map(f => ({ label: f.nome, value: f.id }))]}
-        />
-        <Input label="Mês/Ano de Competência" type="month" className="w-full md:w-auto" value={mesAno} onChange={e => setMesAno(e.target.value)} />
-        <Button icon={FileText} className="w-full md:w-auto" onClick={processarFolha}>Processar Holerite</Button>
+      <Card className="bg-slate-50 border-dashed border-2 p-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <div className="md:col-span-1">
+            <Select 
+                label="Funcionário" 
+                value={selectedFuncId} 
+                onChange={(e) => setSelectedFuncId(e.target.value)}
+                options={[{ label: 'Selecione...', value: '' }, ...db.funcionarios.map(f => ({ label: f.nome, value: f.id }))]}
+            />
+          </div>
+          <div className="md:col-span-1">
+            <Input label="Período Inicial" type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} />
+          </div>
+          <div className="md:col-span-1">
+            <Input label="Período Final" type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} />
+          </div>
+          <div className="md:col-span-1">
+            <Button icon={FileText} className="w-full h-[42px] justify-center" onClick={processarFolha}>Processar Holerite</Button>
+          </div>
+        </div>
       </Card>
 
       {calculoRealizado && (
@@ -1102,7 +1129,7 @@ const FolhaPagamento = () => {
           <div className="bg-slate-800 text-white p-4 md:p-6 flex flex-col md:flex-row justify-between md:items-center gap-4">
              <div>
                 <h2 className="text-xl font-bold">Recibo de Pagamento</h2>
-                <p className="text-slate-300 text-sm opacity-80">{calculoRealizado.funcionario.nome} - Competência: {mesAno}</p>
+                <p className="text-slate-300 text-sm opacity-80">{calculoRealizado.funcionario.nome} - Ref: {formatDate(calculoRealizado.dataInicio)} a {formatDate(calculoRealizado.dataFim)}</p>
              </div>
              <div className="text-left md:text-right">
                 <p className="text-sm opacity-80">Valor Hora</p>
@@ -1169,7 +1196,7 @@ const FolhaPagamento = () => {
             </table>
           </div>
           <div className="p-4 bg-yellow-50 text-yellow-800 text-xs border-t border-yellow-200">
-            * Este é um espelho de cálculo. Baseado em {calculoRealizado.qtdRegistros} registros de ponto encontrados neste mês.
+            * Baseado em {calculoRealizado.qtdRegistros} registros de ponto encontrados entre {formatDate(calculoRealizado.dataInicio)} e {formatDate(calculoRealizado.dataFim)}.
           </div>
         </Card>
       )}
