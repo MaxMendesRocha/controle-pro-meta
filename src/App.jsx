@@ -511,7 +511,7 @@ const FuncionariosList = () => {
 
   if (isEditing) {
     return (
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-2xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-slate-800">{currentFunc?.id ? 'Editar' : 'Novo'} Funcionário</h2>
           <Button variant="ghost" icon={ArrowLeftCircle} onClick={() => setIsEditing(false)}>Voltar</Button>
@@ -526,11 +526,7 @@ const FuncionariosList = () => {
               <Input label="Data de Admissão" type="date" value={currentFunc?.dataAdmissao || ''} onChange={e => setCurrentFunc({...currentFunc, dataAdmissao: e.target.value})} required />
               <Input label="Telefone" value={currentFunc?.telefone || ''} onChange={e => setCurrentFunc({...currentFunc, telefone: e.target.value})} />
               <Input label="Cargo" value={currentFunc?.cargo || 'Babá'} onChange={e => setCurrentFunc({...currentFunc, cargo: e.target.value})} />
-              <div className="md:col-span-2 p-4 bg-slate-50 border border-slate-200 rounded-lg">
-                <h3 className="font-semibold text-slate-700 mb-2">Dados Salariais</h3>
-                <Input label="Salário Base Mensal (R$)" type="number" step="0.01" value={currentFunc?.salario || ''} onChange={e => setCurrentFunc({...currentFunc, salario: e.target.value})} required />
-                <p className="text-xs text-slate-500 mt-2">O valor do salário base será utilizado para cálculo automático do valor da hora, horas extras e fechamento da folha.</p>
-              </div>
+              <Input label="Salário Base (R$)" type="number" value={currentFunc?.salario || ''} onChange={e => setCurrentFunc({...currentFunc, salario: e.target.value})} required />
             </div>
             
             <div className="pt-4 border-t border-slate-100 flex justify-end space-x-2">
@@ -547,42 +543,40 @@ const FuncionariosList = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-slate-800">Funcionários</h1>
-        <Button icon={Plus} onClick={() => { setCurrentFunc({}); setIsEditing(true); }}>Novo Funcionário</Button>
+        <Button icon={Plus} onClick={() => { setCurrentFunc({}); setIsEditing(true); }}>Novo</Button>
       </div>
 
       <Card className="p-0 overflow-hidden">
-        <table className="w-full text-left text-sm text-slate-600">
-          <thead className="bg-slate-50 text-slate-700 font-medium border-b border-slate-200">
-            <tr>
-              <th className="px-6 py-4">Nome</th>
-              <th className="px-6 py-4">Cargo</th>
-              <th className="px-6 py-4">Salário Base</th>
-              <th className="px-6 py-4">Status</th>
-              <th className="px-6 py-4 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {db.funcionarios.length === 0 && (
-              <tr><td colSpan="5" className="px-6 py-8 text-center text-slate-400">Nenhum funcionário cadastrado.</td></tr>
-            )}
-            {db.funcionarios.map(f => (
-              <tr key={f.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-6 py-4 font-medium text-slate-800">{f.nome}</td>
-                <td className="px-6 py-4">{f.cargo || 'Babá'}</td>
-                <td className="px-6 py-4 text-green-600 font-medium">{formatCurrency(f.salario)}</td>
-                <td className="px-6 py-4">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    Ativo
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-right space-x-2">
-                  <button onClick={() => handleEdit(f)} className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"><Edit2 size={16} /></button>
-                  <button onClick={() => handleDelete(f.id)} className="p-1.5 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={16} /></button>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-slate-600 min-w-[600px]">
+            <thead className="bg-slate-50 text-slate-700 font-medium border-b border-slate-200">
+              <tr>
+                <th className="px-6 py-4 whitespace-nowrap">Nome</th>
+                <th className="px-6 py-4 whitespace-nowrap">Cargo</th>
+                <th className="px-6 py-4 whitespace-nowrap">Salário</th>
+                <th className="px-6 py-4 whitespace-nowrap">Admissão</th>
+                <th className="px-6 py-4 whitespace-nowrap text-right">Ações</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {db.funcionarios.length === 0 && (
+                <tr><td colSpan="5" className="px-6 py-8 text-center text-slate-400">Nenhum funcionário cadastrado.</td></tr>
+              )}
+              {db.funcionarios.map(f => (
+                <tr key={f.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-6 py-4 font-medium text-slate-800 whitespace-nowrap">{f.nome}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">{f.cargo || 'Babá'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap font-mono text-green-700">{formatCurrency(f.salario)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">{formatDate(f.dataAdmissao)}</td>
+                  <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
+                    <button onClick={() => handleEdit(f)} className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"><Edit2 size={16} /></button>
+                    <button onClick={() => handleDelete(f.id)} className="p-1.5 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={16} /></button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Card>
     </div>
   );
@@ -672,47 +666,49 @@ const JornadasTrabalho = () => {
             </div>
 
             <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-4 py-3">Dia</th>
-                    <th className="px-4 py-3 text-center">Trabalha?</th>
-                    <th className="px-4 py-3">Entrada</th>
-                    <th className="px-4 py-3">Saída</th>
-                    <th className="px-4 py-3">Intervalo</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {diasSemana.map(({key, label}) => (
-                    <tr key={key} className={!jornada[key]?.ativo ? 'bg-slate-50 opacity-60' : ''}>
-                      <td className="px-4 py-3 font-medium">{label}</td>
-                      <td className="px-4 py-3 text-center">
-                        <input 
-                          type="checkbox" 
-                          checked={jornada[key]?.ativo || false}
-                          onChange={(e) => handleDayChange(key, 'ativo', e.target.checked)}
-                          className="w-4 h-4 text-indigo-600 rounded border-slate-300"
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <input type="time" value={jornada[key]?.entrada || ''} disabled={!jornada[key]?.ativo}
-                          onChange={(e) => handleDayChange(key, 'entrada', e.target.value)}
-                          className="px-2 py-1 border rounded text-sm w-full disabled:bg-slate-100" />
-                      </td>
-                      <td className="px-4 py-3">
-                        <input type="time" value={jornada[key]?.saida || ''} disabled={!jornada[key]?.ativo}
-                          onChange={(e) => handleDayChange(key, 'saida', e.target.value)}
-                          className="px-2 py-1 border rounded text-sm w-full disabled:bg-slate-100" />
-                      </td>
-                      <td className="px-4 py-3">
-                        <input type="time" value={jornada[key]?.intervalo || ''} disabled={!jornada[key]?.ativo}
-                          onChange={(e) => handleDayChange(key, 'intervalo', e.target.value)}
-                          className="px-2 py-1 border rounded text-sm w-full disabled:bg-slate-100" />
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm min-w-[500px]">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-3 whitespace-nowrap">Dia</th>
+                      <th className="px-4 py-3 text-center whitespace-nowrap">Trabalha?</th>
+                      <th className="px-4 py-3 whitespace-nowrap">Entrada</th>
+                      <th className="px-4 py-3 whitespace-nowrap">Saída</th>
+                      <th className="px-4 py-3 whitespace-nowrap">Intervalo</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {diasSemana.map(({key, label}) => (
+                      <tr key={key} className={!jornada[key]?.ativo ? 'bg-slate-50 opacity-60' : ''}>
+                        <td className="px-4 py-3 font-medium whitespace-nowrap">{label}</td>
+                        <td className="px-4 py-3 text-center">
+                          <input 
+                            type="checkbox" 
+                            checked={jornada[key]?.ativo || false}
+                            onChange={(e) => handleDayChange(key, 'ativo', e.target.checked)}
+                            className="w-4 h-4 text-indigo-600 rounded border-slate-300 cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-4 py-3 min-w-[120px]">
+                          <input type="time" value={jornada[key]?.entrada || ''} disabled={!jornada[key]?.ativo}
+                            onChange={(e) => handleDayChange(key, 'entrada', e.target.value)}
+                            className="px-2 py-1 border rounded text-sm w-full disabled:bg-slate-100" />
+                        </td>
+                        <td className="px-4 py-3 min-w-[120px]">
+                          <input type="time" value={jornada[key]?.saida || ''} disabled={!jornada[key]?.ativo}
+                            onChange={(e) => handleDayChange(key, 'saida', e.target.value)}
+                            className="px-2 py-1 border rounded text-sm w-full disabled:bg-slate-100" />
+                        </td>
+                        <td className="px-4 py-3 min-w-[120px]">
+                          <input type="time" value={jornada[key]?.intervalo || ''} disabled={!jornada[key]?.ativo}
+                            onChange={(e) => handleDayChange(key, 'intervalo', e.target.value)}
+                            className="px-2 py-1 border rounded text-sm w-full disabled:bg-slate-100" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -725,20 +721,76 @@ const ControlePonto = () => {
   const { db, refreshData, showToast } = useAppContext();
   const [date, setDate] = useState(getTodayLocal());
   const [selectedFuncId, setSelectedFuncId] = useState('');
-  const [editingId, setEditingId] = useState(null); // Estado para controlar edição
+  const [editingId, setEditingId] = useState(null);
   
   const [records, setRecords] = useState({
     entrada1: '', saida1: '', entrada2: '', saida2: '', obs: ''
   });
 
+  const formatarTempo = (minutos) => {
+    const h = Math.floor(minutos / 60);
+    const m = Math.round(minutos % 60);
+    if (h === 0 && m === 0) return '00h 00m';
+    return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m`;
+  };
+
+  const calcularSaldoDiario = (ponto) => {
+    const funcJornada = db.jornadas.find(j => j.funcionarioId === ponto.funcionarioId);
+    if (!funcJornada) return '-';
+
+    const e1 = ponto.entrada1 ? timeToMinutes(ponto.entrada1) : null;
+    const s1 = ponto.saida1 ? timeToMinutes(ponto.saida1) : null;
+    const e2 = ponto.entrada2 ? timeToMinutes(ponto.entrada2) : null;
+    const s2 = ponto.saida2 ? timeToMinutes(ponto.saida2) : null;
+
+    let minsTrabalhados = 0;
+    if (e1 !== null && s1 !== null && e2 !== null && s2 !== null) {
+       minsTrabalhados = (s1 - e1) + (s2 - e2);
+    } else if (e1 !== null && s1 !== null && e2 === null && s2 === null) {
+       minsTrabalhados = s1 - e1;
+    } else if (e1 !== null && s1 === null && e2 === null && s2 !== null) {
+       minsTrabalhados = s2 - e1;
+    } else {
+       const turno1 = (s1 !== null && e1 !== null && s1 > e1) ? (s1 - e1) : 0;
+       const turno2 = (s2 !== null && e2 !== null && s2 > e2) ? (s2 - e2) : 0;
+       minsTrabalhados = turno1 + turno2;
+    }
+
+    if (minsTrabalhados < 0) minsTrabalhados = 0;
+
+    const diasMapa = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+    const [pAno, pMes, pDia] = ponto.data.split('-');
+    const dateObj = new Date(pAno, pMes - 1, pDia);
+    const diaSemana = diasMapa[dateObj.getDay()];
+
+    const configDia = funcJornada[diaSemana];
+    let minsEsperados = 0;
+
+    if (configDia && configDia.ativo) {
+       const expE = timeToMinutes(configDia.entrada);
+       const expS = timeToMinutes(configDia.saida);
+       const expI = timeToMinutes(configDia.intervalo);
+       if (expS > expE) {
+          minsEsperados = (expS - expE) - expI;
+       }
+    }
+
+    const isFolga = !configDia || !configDia.ativo;
+
+    if (diaSemana === 'domingo' || isFolga) {
+       if (minsTrabalhados === 0) return '-';
+       return <span className="text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded">+{formatarTempo(minsTrabalhados)}</span>;
+    }
+
+    const saldo = minsTrabalhados - minsEsperados;
+    if (saldo === 0) return <span className="text-slate-400">00h 00m</span>;
+    if (saldo > 0) return <span className="text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded">+{formatarTempo(saldo)}</span>;
+    return <span className="text-red-600 font-bold bg-red-50 px-2 py-1 rounded">-{formatarTempo(Math.abs(saldo))}</span>;
+  };
+
   const handleSavePonto = () => {
     if (!selectedFuncId || !date) return showToast('Preencha funcionário e data', 'error');
-    
-    const pontoData = {
-      funcionarioId: selectedFuncId,
-      data: date,
-      ...records
-    };
+    const pontoData = { funcionarioId: selectedFuncId, data: date, ...records };
     
     if (editingId) {
       StorageService.updateRegistroPonto(editingId, pontoData);
@@ -747,7 +799,6 @@ const ControlePonto = () => {
       StorageService.saveRegistroPonto(pontoData);
       showToast('Ponto registrado com sucesso!');
     }
-    
     refreshData();
     cancelarEdicao();
   };
@@ -756,17 +807,11 @@ const ControlePonto = () => {
     setEditingId(ponto.id);
     setSelectedFuncId(ponto.funcionarioId);
     setDate(ponto.data);
-    setRecords({
-      entrada1: ponto.entrada1 || '',
-      saida1: ponto.saida1 || '',
-      entrada2: ponto.entrada2 || '',
-      saida2: ponto.saida2 || '',
-      obs: ponto.obs || ''
-    });
+    setRecords({ entrada1: ponto.entrada1 || '', saida1: ponto.saida1 || '', entrada2: ponto.entrada2 || '', saida2: ponto.saida2 || '', obs: ponto.obs || '' });
   };
 
   const handleDelete = (id) => {
-    if (confirm('Tem certeza que deseja excluir este registro de ponto?')) {
+    if (confirm('Tem certeza que deseja excluir este registro?')) {
       StorageService.deleteRegistroPonto(id);
       showToast('Registro excluído com sucesso');
       refreshData();
@@ -781,26 +826,16 @@ const ControlePonto = () => {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-800">Controle de Ponto</h1>
-      
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-1 space-y-4 h-fit">
           <div className="flex justify-between items-center border-b pb-2">
             <h3 className="font-semibold text-lg text-slate-800">
               {editingId ? 'Editar Registro' : 'Registrar Manual'}
             </h3>
-            {editingId && (
-              <button onClick={cancelarEdicao} className="text-sm text-slate-500 hover:text-slate-700 font-medium">
-                Cancelar
-              </button>
-            )}
+            {editingId && <button onClick={cancelarEdicao} className="text-sm text-slate-500 hover:text-slate-700 font-medium">Cancelar</button>}
           </div>
 
-          <Select 
-            label="Funcionário" 
-            value={selectedFuncId} 
-            onChange={(e) => setSelectedFuncId(e.target.value)}
-            options={[{ label: 'Selecione...', value: '' }, ...db.funcionarios.map(f => ({ label: f.nome, value: f.id }))]}
-          />
+          <Select label="Funcionário" value={selectedFuncId} onChange={(e) => setSelectedFuncId(e.target.value)} options={[{ label: 'Selecione...', value: '' }, ...db.funcionarios.map(f => ({ label: f.nome, value: f.id }))]} />
           <Input label="Data do Registro" type="date" value={date} onChange={e => setDate(e.target.value)} />
           
           <div className="grid grid-cols-2 gap-3 pt-2">
@@ -812,21 +847,12 @@ const ControlePonto = () => {
           
           <div className="flex flex-col space-y-1">
              <label className="text-sm font-medium text-slate-700">Observações</label>
-             <textarea 
-                className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-800" 
-                rows="2"
-                value={records.obs}
-                onChange={e => setRecords({...records, obs: e.target.value})}
-             ></textarea>
+             <textarea className="px-3 py-2 border border-slate-300 rounded-lg text-sm" rows="2" value={records.obs} onChange={e => setRecords({...records, obs: e.target.value})}></textarea>
           </div>
 
           <div className="flex space-x-2 pt-2">
-            {editingId && (
-              <Button className="flex-1 justify-center" variant="secondary" onClick={cancelarEdicao}>Cancelar</Button>
-            )}
-            <Button className="flex-1 justify-center" icon={editingId ? CheckCircle : Clock} onClick={handleSavePonto}>
-              {editingId ? 'Atualizar' : 'Salvar Registro'}
-            </Button>
+            {editingId && <Button className="flex-1 justify-center" variant="secondary" onClick={cancelarEdicao}>Cancelar</Button>}
+            <Button className="flex-1 justify-center" icon={editingId ? CheckCircle : Clock} onClick={handleSavePonto}>{editingId ? 'Atualizar' : 'Salvar Registro'}</Button>
           </div>
         </Card>
 
@@ -834,16 +860,17 @@ const ControlePonto = () => {
           <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
             <h3 className="font-semibold text-slate-800">Últimos Registros</h3>
           </div>
-          <div className="flex-1 overflow-auto p-0">
-             <table className="w-full text-left text-sm text-slate-600">
+          <div className="flex-1 overflow-x-auto p-0">
+             <table className="w-full text-left text-sm text-slate-600 min-w-[700px]">
                 <thead className="bg-slate-100 text-slate-700 font-medium sticky top-0">
                   <tr>
-                    <th className="px-4 py-3">Data</th>
-                    <th className="px-4 py-3">Funcionário</th>
-                    <th className="px-4 py-3 text-center">Entrada</th>
-                    <th className="px-4 py-3 text-center">Intervalo</th>
-                    <th className="px-4 py-3 text-center">Saída</th>
-                    <th className="px-4 py-3 text-right">Ações</th>
+                    <th className="px-4 py-3 whitespace-nowrap">Data</th>
+                    <th className="px-4 py-3 whitespace-nowrap">Funcionário</th>
+                    <th className="px-4 py-3 text-center whitespace-nowrap">Entrada</th>
+                    <th className="px-4 py-3 text-center whitespace-nowrap">Intervalo</th>
+                    <th className="px-4 py-3 text-center whitespace-nowrap">Saída</th>
+                    <th className="px-4 py-3 text-center whitespace-nowrap">Extra/Falta</th>
+                    <th className="px-4 py-3 text-right whitespace-nowrap">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -852,20 +879,19 @@ const ControlePonto = () => {
                     return (
                       <tr key={p.id || i} className={`hover:bg-slate-50 transition-colors ${editingId === p.id ? 'bg-indigo-50' : ''}`}>
                         <td className="px-4 py-3 whitespace-nowrap">{formatDate(p.data)}</td>
-                        <td className="px-4 py-3 font-medium text-slate-800">{func ? func.nome : 'Desconhecido'}</td>
+                        <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{func ? func.nome : 'Desconhecido'}</td>
                         <td className="px-4 py-3 text-center font-mono bg-green-50">{p.entrada1 || '-'}</td>
-                        <td className="px-4 py-3 text-center font-mono text-slate-500">{p.saida1 || '-'} / {p.entrada2 || '-'}</td>
+                        <td className="px-4 py-3 text-center font-mono text-slate-500 whitespace-nowrap">{p.saida1 || '-'} / {p.entrada2 || '-'}</td>
                         <td className="px-4 py-3 text-center font-mono bg-orange-50">{p.saida2 || '-'}</td>
-                        <td className="px-4 py-3 text-right space-x-2">
+                        <td className="px-4 py-3 text-center whitespace-nowrap">{calcularSaldoDiario(p)}</td>
+                        <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
                           <button onClick={() => handleEdit(p)} className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors rounded hover:bg-indigo-50" title="Editar"><Edit2 size={16} /></button>
                           <button onClick={() => handleDelete(p.id)} className="p-1.5 text-slate-400 hover:text-red-600 transition-colors rounded hover:bg-red-50" title="Excluir"><Trash2 size={16} /></button>
                         </td>
                       </tr>
                     );
                   })}
-                  {db.pontos.length === 0 && (
-                    <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400">Nenhum registro de ponto encontrado.</td></tr>
-                  )}
+                  {db.pontos.length === 0 && <tr><td colSpan="7" className="px-4 py-8 text-center text-slate-400">Nenhum registro de ponto encontrado.</td></tr>}
                 </tbody>
              </table>
           </div>
@@ -884,6 +910,13 @@ const FolhaPagamento = () => {
   });
   
   const [calculoRealizado, setCalculoRealizado] = useState(null);
+
+  const formatarTempo = (minutos) => {
+    const h = Math.floor(minutos / 60);
+    const m = Math.round(minutos % 60);
+    if (h === 0 && m === 0) return '00h 00m';
+    return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m`;
+  };
 
   const processarFolha = () => {
     if (!selectedFuncId || !mesAno) return showToast('Selecione funcionário e mês', 'error');
@@ -952,7 +985,6 @@ const FolhaPagamento = () => {
          }
       }
 
-      // NOVA REGRA APLICADA À FOLHA
       const isFolga = !configDia || !configDia.ativo;
 
       if (diaSemana === 'domingo' || isFolga) {
@@ -969,7 +1001,6 @@ const FolhaPagamento = () => {
       }
     });
 
-    const horasTrabalhadas = totalMinutosTrabalhados / 60;
     const horasExtras50 = totalMinutosExtras50 / 60;
     const horasExtras100 = totalMinutosExtras100 / 60;
     const horasFalta = totalMinutosFalta / 60;
@@ -982,9 +1013,11 @@ const FolhaPagamento = () => {
     const liquido = salarioBase + valorHE50 + valorHE100 - valorFaltas - INSS;
 
     setCalculoRealizado({
-      funcionario, mesAno, salarioBase, valorHora, monthlyHrs,
-      horasTrabalhadas, horasExtras50, valorHE50, horasExtras100, valorHE100,
-      horasFalta, valorFaltas, INSS, liquido,
+      funcionario, mesAno, salarioBase, valorHora, 
+      monthlyHrsMinutos: monthlyHrs * 60,
+      totalMinutosExtras50, valorHE50, 
+      totalMinutosExtras100, valorHE100,
+      totalMinutosFalta, valorFaltas, INSS, liquido,
       qtdRegistros: pontosMes.length
     });
     showToast('Cálculo gerado com sucesso!');
@@ -997,84 +1030,86 @@ const FolhaPagamento = () => {
       <Card className="flex flex-wrap gap-4 items-end bg-slate-50 border-dashed border-2">
         <Select 
             label="Funcionário" 
-            className="w-64"
+            className="w-full md:w-64"
             value={selectedFuncId} 
             onChange={(e) => setSelectedFuncId(e.target.value)}
             options={[{ label: 'Selecione...', value: '' }, ...db.funcionarios.map(f => ({ label: f.nome, value: f.id }))]}
         />
-        <Input label="Mês/Ano de Competência" type="month" value={mesAno} onChange={e => setMesAno(e.target.value)} />
-        <Button icon={FileText} onClick={processarFolha}>Processar Holerite</Button>
+        <Input label="Mês/Ano de Competência" type="month" className="w-full md:w-auto" value={mesAno} onChange={e => setMesAno(e.target.value)} />
+        <Button icon={FileText} className="w-full md:w-auto" onClick={processarFolha}>Processar Holerite</Button>
       </Card>
 
       {calculoRealizado && (
         <Card className="max-w-3xl mx-auto p-0 overflow-hidden shadow-md">
-          <div className="bg-slate-800 text-white p-6 flex justify-between items-center">
+          <div className="bg-slate-800 text-white p-4 md:p-6 flex flex-col md:flex-row justify-between md:items-center gap-4">
              <div>
-                <h2 className="text-xl font-bold">Recibo de Pagamento de Salário</h2>
+                <h2 className="text-xl font-bold">Recibo de Pagamento</h2>
                 <p className="text-slate-300 text-sm opacity-80">{calculoRealizado.funcionario.nome} - Competência: {mesAno}</p>
              </div>
-             <div className="text-right">
+             <div className="text-left md:text-right">
                 <p className="text-sm opacity-80">Valor Hora</p>
                 <p className="font-mono text-lg">{formatCurrency(calculoRealizado.valorHora)}</p>
              </div>
           </div>
           
-          <table className="w-full text-sm">
-            <thead className="bg-slate-100 border-b border-slate-200 text-slate-600">
-              <tr>
-                <th className="px-6 py-3 text-left">Descrição</th>
-                <th className="px-6 py-3 text-center">Referência</th>
-                <th className="px-6 py-3 text-right">Vencimentos</th>
-                <th className="px-6 py-3 text-right">Descontos</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              <tr>
-                <td className="px-6 py-4 font-medium">Salário Base (Mensal)</td>
-                <td className="px-6 py-4 text-center">{calculoRealizado.monthlyHrs.toFixed(2)}h</td>
-                <td className="px-6 py-4 text-right text-green-600">{formatCurrency(calculoRealizado.salarioBase)}</td>
-                <td className="px-6 py-4 text-right"></td>
-              </tr>
-              {calculoRealizado.horasExtras50 > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[500px]">
+              <thead className="bg-slate-100 border-b border-slate-200 text-slate-600">
                 <tr>
-                  <td className="px-6 py-4 font-medium">Horas Extras 50%</td>
-                  <td className="px-6 py-4 text-center">{calculoRealizado.horasExtras50.toFixed(2)}h</td>
-                  <td className="px-6 py-4 text-right text-green-600">{formatCurrency(calculoRealizado.valorHE50)}</td>
-                  <td className="px-6 py-4 text-right"></td>
+                  <th className="px-6 py-3 text-left whitespace-nowrap">Descrição</th>
+                  <th className="px-6 py-3 text-center whitespace-nowrap">Referência</th>
+                  <th className="px-6 py-3 text-right whitespace-nowrap">Vencimentos</th>
+                  <th className="px-6 py-3 text-right whitespace-nowrap">Descontos</th>
                 </tr>
-              )}
-              {calculoRealizado.horasExtras100 > 0 && (
+              </thead>
+              <tbody className="divide-y divide-slate-100">
                 <tr>
-                  <td className="px-6 py-4 font-medium">Horas Extras 100% (Dom/Folga)</td>
-                  <td className="px-6 py-4 text-center">{calculoRealizado.horasExtras100.toFixed(2)}h</td>
-                  <td className="px-6 py-4 text-right text-green-600">{formatCurrency(calculoRealizado.valorHE100)}</td>
-                  <td className="px-6 py-4 text-right"></td>
+                  <td className="px-6 py-4 font-medium whitespace-nowrap">Salário Base (Mensal)</td>
+                  <td className="px-6 py-4 text-center whitespace-nowrap">{formatarTempo(calculoRealizado.monthlyHrsMinutos)}</td>
+                  <td className="px-6 py-4 text-right text-green-600 whitespace-nowrap">{formatCurrency(calculoRealizado.salarioBase)}</td>
+                  <td className="px-6 py-4 text-right whitespace-nowrap"></td>
                 </tr>
-              )}
-              {calculoRealizado.horasFalta > 0 && (
+                {calculoRealizado.totalMinutosExtras50 > 0 && (
+                  <tr>
+                    <td className="px-6 py-4 font-medium whitespace-nowrap">Horas Extras 50%</td>
+                    <td className="px-6 py-4 text-center whitespace-nowrap">{formatarTempo(calculoRealizado.totalMinutosExtras50)}</td>
+                    <td className="px-6 py-4 text-right text-green-600 whitespace-nowrap">{formatCurrency(calculoRealizado.valorHE50)}</td>
+                    <td className="px-6 py-4 text-right whitespace-nowrap"></td>
+                  </tr>
+                )}
+                {calculoRealizado.totalMinutosExtras100 > 0 && (
+                  <tr>
+                    <td className="px-6 py-4 font-medium whitespace-nowrap">Horas Extras 100% (Dom/Folga)</td>
+                    <td className="px-6 py-4 text-center whitespace-nowrap">{formatarTempo(calculoRealizado.totalMinutosExtras100)}</td>
+                    <td className="px-6 py-4 text-right text-green-600 whitespace-nowrap">{formatCurrency(calculoRealizado.valorHE100)}</td>
+                    <td className="px-6 py-4 text-right whitespace-nowrap"></td>
+                  </tr>
+                )}
+                {calculoRealizado.totalMinutosFalta > 0 && (
+                  <tr>
+                    <td className="px-6 py-4 font-medium whitespace-nowrap">Atrasos / Faltas</td>
+                    <td className="px-6 py-4 text-center whitespace-nowrap">{formatarTempo(calculoRealizado.totalMinutosFalta)}</td>
+                    <td className="px-6 py-4 text-right whitespace-nowrap"></td>
+                    <td className="px-6 py-4 text-right text-red-600 whitespace-nowrap">{formatCurrency(calculoRealizado.valorFaltas)}</td>
+                  </tr>
+                )}
                 <tr>
-                  <td className="px-6 py-4 font-medium">Atrasos / Faltas</td>
-                  <td className="px-6 py-4 text-center">{calculoRealizado.horasFalta.toFixed(2)}h</td>
-                  <td className="px-6 py-4 text-right"></td>
-                  <td className="px-6 py-4 text-right text-red-600">{formatCurrency(calculoRealizado.valorFaltas)}</td>
+                  <td className="px-6 py-4 font-medium whitespace-nowrap">INSS (Estimado)</td>
+                  <td className="px-6 py-4 text-center whitespace-nowrap">7.5%</td>
+                  <td className="px-6 py-4 text-right whitespace-nowrap"></td>
+                  <td className="px-6 py-4 text-right text-red-600 whitespace-nowrap">{formatCurrency(calculoRealizado.INSS)}</td>
                 </tr>
-              )}
-              <tr>
-                <td className="px-6 py-4 font-medium">INSS (Estimado)</td>
-                <td className="px-6 py-4 text-center">7.5%</td>
-                <td className="px-6 py-4 text-right"></td>
-                <td className="px-6 py-4 text-right text-red-600">{formatCurrency(calculoRealizado.INSS)}</td>
-              </tr>
-            </tbody>
-            <tfoot className="bg-slate-50 border-t-2 border-slate-200">
-              <tr>
-                <td colSpan="2" className="px-6 py-4 font-bold text-slate-700 text-right">Líquido a Receber:</td>
-                <td colSpan="2" className="px-6 py-4 text-right">
-                  <span className="text-2xl font-bold text-indigo-700">{formatCurrency(calculoRealizado.liquido)}</span>
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+              </tbody>
+              <tfoot className="bg-slate-50 border-t-2 border-slate-200">
+                <tr>
+                  <td colSpan="2" className="px-6 py-4 font-bold text-slate-700 text-right whitespace-nowrap">Líquido a Receber:</td>
+                  <td colSpan="2" className="px-6 py-4 text-right whitespace-nowrap">
+                    <span className="text-2xl font-bold text-indigo-700">{formatCurrency(calculoRealizado.liquido)}</span>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
           <div className="p-4 bg-yellow-50 text-yellow-800 text-xs border-t border-yellow-200">
             * Este é um espelho de cálculo. Baseado em {calculoRealizado.qtdRegistros} registros de ponto encontrados neste mês.
           </div>
