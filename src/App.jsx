@@ -26,7 +26,7 @@ const auth = getAuth(app);
 const dbFirestore = getFirestore(app);
 
 // ==========================================
-// UTILS & HELPER FUNCTIONS (TRATAMENTO SEGURO)
+// UTILS & HELPER FUNCTIONS
 // ==========================================
 const timeToMinutes = (timeStr) => {
   if (!timeStr || typeof timeStr !== 'string') return 0;
@@ -76,43 +76,32 @@ const calculateMonthlyHours = (weeklyHours) => (weeklyHours * 30) / 7;
 // ==========================================
 // FIRESTORE CLOUD SERVICE
 // ==========================================
+// NOTA: Para o colaborador funcionar 100% no futuro, a query precisará buscar pelo 'empresaId' em vez de 'userId'
 const CloudService = {
   getFuncionarios: async (uid) => {
     const q = query(collection(dbFirestore, 'funcionarios'), where('userId', '==', uid));
     const snap = await getDocs(q);
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   },
-  saveFuncionario: async (uid, func) => {
-    await addDoc(collection(dbFirestore, 'funcionarios'), { ...func, userId: uid });
-  },
-  updateFuncionario: async (id, data) => {
-    await updateDoc(doc(dbFirestore, 'funcionarios', id), data);
-  },
-  deleteFuncionario: async (id) => {
-    await deleteDoc(doc(dbFirestore, 'funcionarios', id));
-  },
+  saveFuncionario: async (uid, func) => await addDoc(collection(dbFirestore, 'funcionarios'), { ...func, userId: uid }),
+  updateFuncionario: async (id, data) => await updateDoc(doc(dbFirestore, 'funcionarios', id), data),
+  deleteFuncionario: async (id) => await deleteDoc(doc(dbFirestore, 'funcionarios', id)),
+  
   getJornadas: async (uid) => {
     const q = query(collection(dbFirestore, 'jornadas'), where('userId', '==', uid));
     const snap = await getDocs(q);
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   },
-  saveJornada: async (uid, funcId, jornadaData) => {
-    await setDoc(doc(dbFirestore, 'jornadas', funcId), { ...jornadaData, funcionarioId: funcId, userId: uid });
-  },
+  saveJornada: async (uid, funcId, jornadaData) => await setDoc(doc(dbFirestore, 'jornadas', funcId), { ...jornadaData, funcionarioId: funcId, userId: uid }),
+  
   getRegistrosPonto: async (uid) => {
     const q = query(collection(dbFirestore, 'pontos'), where('userId', '==', uid));
     const snap = await getDocs(q);
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   },
-  saveRegistroPonto: async (uid, registro) => {
-    await addDoc(collection(dbFirestore, 'pontos'), { ...registro, userId: uid });
-  },
-  updateRegistroPonto: async (id, data) => {
-    await updateDoc(doc(dbFirestore, 'pontos', id), data);
-  },
-  deleteRegistroPonto: async (id) => {
-    await deleteDoc(doc(dbFirestore, 'pontos', id));
-  }
+  saveRegistroPonto: async (uid, registro) => await addDoc(collection(dbFirestore, 'pontos'), { ...registro, userId: uid }),
+  updateRegistroPonto: async (id, data) => await updateDoc(doc(dbFirestore, 'pontos', id), data),
+  deleteRegistroPonto: async (id) => await deleteDoc(doc(dbFirestore, 'pontos', id))
 };
 
 // ==========================================
@@ -222,7 +211,119 @@ const Select = ({ label, value, onChange, options, className = '' }) => (
 );
 
 // ==========================================
-// MÓDULO: DASHBOARD (ALINHADO COM A FOLHA)
+// MÓDULO: PONTO DO COLABORADOR (MOBILE-FIRST)
+// ==========================================
+const PontoColaborador = () => {
+  const { db, currentUser, refreshData, showToast } = useAppContext();
+  const [horaAtual, setHoraAtual] = useState(new Date());
+  const [isSaving, setIsSaving] = useState(false);
+  const hoje = getTodayLocal();
+
+  useEffect(() => {
+    const timer = setInterval(() => setHoraAtual(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Para esta versão, assumimos que o colaborador conectado é o primeiro da lista
+  // (Em um ambiente real multi-inquilino, isso seria filtrado pelo e-mail/uid do funcionário)
+  const colaborador = db.funcionarios[0]; 
+  const pontoHoje = db.pontos.find(p => p.funcionarioId === colaborador?.id && p.data === hoje);
+
+  const handleBaterPontoRapido = async () => {
+    if (!colaborador) return showToast('Perfil de funcionário não encontrado.', 'error');
+    setIsSaving(true);
+
+    let novosRegistros = {
+      entrada1: pontoHoje?.entrada1 || '',
+      saida1: pontoHoje?.saida1 || '',
+      entrada2: pontoHoje?.entrada2 || '',
+      saida2: pontoHoje?.saida2 || '',
+      obs: pontoHoje?.obs || ''
+    };
+
+    const horaFormatada = `${String(horaAtual.getHours()).padStart(2, '0')}:${String(horaAtual.getMinutes()).padStart(2, '0')}`;
+
+    if (!novosRegistros.entrada1) {
+      novosRegistros.entrada1 = horaFormatada;
+      showToast('Entrada 1 registrada!');
+    } else if (!novosRegistros.saida1) {
+      novosRegistros.saida1 = horaFormatada;
+      showToast('Saída 1 registrada!');
+    } else if (!novosRegistros.entrada2) {
+      novosRegistros.entrada2 = horaFormatada;
+      showToast('Entrada 2 registrada!');
+    } else if (!novosRegistros.saida2) {
+      novosRegistros.saida2 = horaFormatada;
+      showToast('Saída 2 registrada!');
+    } else {
+      setIsSaving(false);
+      return showToast('Todos os pontos de hoje já foram preenchidos.', 'error');
+    }
+
+    const pontoData = { funcionarioId: colaborador.id, data: hoje, ...novosRegistros };
+
+    try {
+      if (pontoHoje?.id) {
+        await CloudService.updateRegistroPonto(pontoHoje.id, pontoData);
+      } else {
+        await CloudService.saveRegistroPonto(currentUser.uid, pontoData);
+      }
+      refreshData();
+    } catch (e) {
+      showToast('Erro ao gravar o ponto.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="max-w-md mx-auto space-y-6 text-center py-6">
+      <Card className="border-2 border-indigo-100 bg-gradient-to-b from-indigo-50/30 to-white">
+        <h2 className="text-xl font-bold text-slate-800">Olá, {colaborador?.nome || 'Colaborador'}</h2>
+        <p className="text-sm text-slate-500 mt-1">Registre seu horário de trabalho com segurança</p>
+        
+        <div className="my-8">
+          <p className="text-5xl font-black font-mono text-indigo-700 tracking-wider">
+            {horaAtual.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </p>
+          <p className="text-sm text-slate-400 mt-2 font-medium">
+            {horaAtual.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
+        </div>
+
+        <button 
+          onClick={handleBaterPontoRapido}
+          disabled={isSaving}
+          className="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-indigo-700 active:scale-95 transition-all text-lg flex items-center justify-center space-x-2 disabled:opacity-70"
+        >
+          <Clock size={22} />
+          <span>{isSaving ? 'Registrando...' : 'Bater Ponto Agora'}</span>
+        </button>
+      </Card>
+
+      <Card>
+        <h3 className="font-bold text-slate-700 text-left border-b pb-2 mb-4">Registros de Hoje</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="p-3 bg-slate-50 rounded-lg">
+            <p className="text-xs text-slate-400 font-bold">Turno 1</p>
+            <p className="text-md font-mono font-bold mt-1 text-slate-700">
+              {pontoHoje?.entrada1 || '--:--'} → {pontoHoje?.saida1 || '--:--'}
+            </p>
+          </div>
+          <div className="p-3 bg-slate-50 rounded-lg">
+            <p className="text-xs text-slate-400 font-bold">Turno 2</p>
+            <p className="text-md font-mono font-bold mt-1 text-slate-700">
+              {pontoHoje?.entrada2 || '--:--'} → {pontoHoje?.saida2 || '--:--'}
+            </p>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+// ==========================================
+// MÓDULO: DASHBOARD (ADMIN)
 // ==========================================
 const Dashboard = () => {
   const { db } = useAppContext();
@@ -239,7 +340,10 @@ const Dashboard = () => {
   let totalMinutosExtras100 = 0;
   const diasMapa = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
 
-  pontosMesFiltrado.forEach(p => {
+  const pontosUnicos = {};
+  pontosMesFiltrado.forEach(p => pontosUnicos[`${p.funcionarioId}-${p.data}`] = p);
+
+  Object.values(pontosUnicos).forEach(p => {
     const jornada = db.jornadas.find(j => j.funcionarioId === p.funcionarioId);
     if (!jornada) return;
 
@@ -252,6 +356,7 @@ const Dashboard = () => {
     if (e1 > 0 && s1 > 0) minsTrabalhados += (s1 - e1);
     if (e2 > 0 && s2 > 0) minsTrabalhados += (s2 - e2);
     if (e1 > 0 && s2 > 0 && s1 === 0 && e2 === 0) minsTrabalhados = (s2 - e1);
+    if (e1 > 0 && s1 > 0 && e2 === 0 && s2 === 0) minsTrabalhados = (s1 - e1);
 
     totalMinutosTrabalhados += minsTrabalhados;
 
@@ -261,11 +366,11 @@ const Dashboard = () => {
 
     let minsEsperados = 0;
     if (configDia && configDia.ativo) {
-       minsEsperados = timeToMinutes(configDia.saida) - timeToMinutes(configDia.entrada) - timeToMinutes(configDia.intervalo || "00:00");
+       minsEsperados = timeToMinutes(configDia.saida || "00:00") - timeToMinutes(configDia.entrada || "00:00") - timeToMinutes(configDia.intervalo || "00:00");
     }
 
     if (diaSemana === 'domingo' || !configDia?.ativo) {
-      totalMinutosExtras100 += minsTrabalhados;
+      if (minsTrabalhados > 0) totalMinutosExtras100 += minsTrabalhados;
     } else if (minsTrabalhados > minsEsperados) {
       totalMinutosExtras50 += (minsTrabalhados - minsEsperados);
     }
@@ -277,7 +382,7 @@ const Dashboard = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:justify-between md:items-center border-b border-slate-200 pb-4">
-        <div><h1 className="text-2xl font-bold text-slate-800">Dashboard</h1><p className="text-sm text-slate-500">Visão geral da nuvem</p></div>
+        <div><h1 className="text-2xl font-bold text-slate-800">Dashboard</h1><p className="text-sm text-slate-500">Visão geral do sistema</p></div>
         <div className="flex items-center space-x-3 bg-white p-2 rounded-lg shadow-sm mt-4 md:mt-0 border border-slate-200">
            <label className="text-sm font-medium text-slate-600 pl-2">Competência:</label>
            <input type="month" value={mesAno} onChange={e => setMesAno(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-md text-sm focus:ring-indigo-500" />
@@ -303,7 +408,7 @@ const FuncionariosList = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   const handleDelete = async (id) => {
-    if (confirm('Tem certeza que deseja excluir da nuvem?')) {
+    if (confirm('Tem certeza que deseja excluir?')) {
       await CloudService.deleteFuncionario(id);
       showToast('Excluído da nuvem');
       refreshData();
@@ -316,10 +421,10 @@ const FuncionariosList = () => {
     try {
       if (currentFunc.id) {
         await CloudService.updateFuncionario(currentFunc.id, currentFunc);
-        showToast('Atualizado na nuvem');
+        showToast('Atualizado com sucesso');
       } else {
         await CloudService.saveFuncionario(currentUser.uid, currentFunc);
-        showToast('Salvo na nuvem');
+        showToast('Salvo com sucesso');
       }
       setIsEditing(false);
       refreshData();
@@ -347,7 +452,7 @@ const FuncionariosList = () => {
             </div>
             <div className="pt-4 flex justify-end space-x-2">
               <Button variant="secondary" onClick={() => setIsEditing(false)}>Cancelar</Button>
-              <Button type="submit" icon={Cloud} disabled={isSaving}>{isSaving ? 'Salvando...' : 'Salvar na Nuvem'}</Button>
+              <Button type="submit" icon={Cloud} disabled={isSaving}>{isSaving ? 'Salvando...' : 'Salvar'}</Button>
             </div>
           </form>
         </Card>
@@ -405,7 +510,7 @@ const JornadasTrabalho = () => {
     setIsSaving(true);
     try {
       await CloudService.saveJornada(currentUser.uid, selectedFuncId, jornada);
-      showToast('Jornada sincronizada com a nuvem');
+      showToast('Jornada salva');
       refreshData();
     } catch(e) {
       showToast('Erro ao salvar', 'error');
@@ -452,7 +557,7 @@ const JornadasTrabalho = () => {
 };
 
 // ==========================================
-// MÓDULO: CONTROLE DE PONTO
+// MÓDULO: CONTROLE DE PONTO (ADMIN)
 // ==========================================
 const ControlePonto = () => {
   const { db, refreshData, showToast, currentUser } = useAppContext();
@@ -474,11 +579,11 @@ const ControlePonto = () => {
       const pontoData = { funcionarioId: selectedFuncId, data: date, ...records };
       if (editingId) await CloudService.updateRegistroPonto(editingId, pontoData);
       else await CloudService.saveRegistroPonto(currentUser.uid, pontoData);
-      showToast('Ponto salvo na nuvem!');
+      showToast('Ponto salvo!');
       refreshData();
       setEditingId(null);
       setRecords({ entrada1: '', saida1: '', entrada2: '', saida2: '', obs: '' });
-    } catch(e) { showToast('Erro na nuvem', 'error'); } 
+    } catch(e) { showToast('Erro', 'error'); } 
     finally { setIsSaving(false); }
   };
 
@@ -488,7 +593,7 @@ const ControlePonto = () => {
   };
 
   const handleDelete = async (id) => {
-    if (confirm('Excluir este registro da nuvem?')) {
+    if (confirm('Excluir este registro?')) {
       await CloudService.deleteRegistroPonto(id);
       showToast('Excluído'); refreshData();
     }
@@ -496,10 +601,10 @@ const ControlePonto = () => {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-800">Controle de Ponto</h1>
+      <h1 className="text-2xl font-bold text-slate-800">Lançamento de Ponto (Manual)</h1>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-1 space-y-5 bg-slate-50 border-2">
-          <div className="flex justify-between items-center border-b pb-3"><h3 className="font-bold text-lg">{editingId ? 'Editar Registro' : 'Lançamento Manual'}</h3></div>
+          <div className="flex justify-between items-center border-b pb-3"><h3 className="font-bold text-lg">{editingId ? 'Editar Registro' : 'Lançar Ponto'}</h3></div>
           <Select label="Funcionário" value={selectedFuncId} onChange={(e) => setSelectedFuncId(e.target.value)} options={[{ label: 'Selecione...', value: '' }, ...db.funcionarios.map(f => ({ label: f.nome, value: f.id }))]} />
           <div className="flex flex-col space-y-1">
             <div className="flex justify-between items-center"><label className="text-sm font-medium">Data</label><button type="button" onClick={() => setDate(getTodayLocal())} className="text-[11px] text-indigo-600 font-bold bg-indigo-50 px-2 rounded">Hoje</button></div>
@@ -516,10 +621,10 @@ const ControlePonto = () => {
               </div>
             ))}
           </div>
-          <Button className="w-full justify-center py-3 text-lg" icon={Cloud} onClick={handleSavePonto} disabled={isSaving}>{isSaving ? 'Enviando...' : 'Salvar na Nuvem'}</Button>
+          <Button className="w-full justify-center py-3 text-lg" icon={Cloud} onClick={handleSavePonto} disabled={isSaving}>{isSaving ? 'Enviando...' : 'Salvar'}</Button>
         </Card>
         <Card className="lg:col-span-2 p-0 overflow-hidden flex flex-col">
-          <div className="p-4 border-b bg-white"><h3 className="font-semibold">Últimos Registros (Nuvem)</h3></div>
+          <div className="p-4 border-b bg-white"><h3 className="font-semibold">Últimos Registros do Sistema</h3></div>
           <div className="flex-1 overflow-x-auto p-0 bg-white">
              <table className="w-full text-left text-sm min-w-[700px]">
                 <thead className="bg-slate-50 border-b"><tr><th className="px-4 py-3">Data</th><th className="px-4 py-3">Funcionário</th><th className="px-4 py-3 text-center">Início</th><th className="px-4 py-3 text-center">Fim</th><th className="px-4 py-3 text-right">Ações</th></tr></thead>
@@ -546,10 +651,11 @@ const ControlePonto = () => {
 };
 
 // ==========================================
-// MÓDULO: FOLHA DE PAGAMENTO (MATEMÁTICA REAL)
+// MÓDULO: FOLHA DE PAGAMENTO
 // ==========================================
-const FolhaPagamento = () => {
+const FolhaPagamento = ({ isAdmin }) => {
   const { db, showToast } = useAppContext();
+  // Se for admin permite escolher, se não, fixa no funcionário [0]
   const [selectedFuncId, setSelectedFuncId] = useState('');
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
@@ -565,15 +671,17 @@ const FolhaPagamento = () => {
   }, []);
 
   const processarFolha = () => {
-    if (!selectedFuncId || !dataInicio || !dataFim) return showToast('Preencha os campos', 'error');
+    const idParaProcessar = isAdmin ? selectedFuncId : db.funcionarios[0]?.id;
 
-    const funcionario = db.funcionarios.find(f => f.id === selectedFuncId);
-    const jornada = db.jornadas.find(j => j.funcionarioId === selectedFuncId);
+    if (!idParaProcessar || !dataInicio || !dataFim) return showToast('Preencha os campos', 'error');
+
+    const funcionario = db.funcionarios.find(f => f.id === idParaProcessar);
+    const jornada = db.jornadas.find(j => j.funcionarioId === idParaProcessar);
     
-    if (!funcionario || !jornada) return showToast('Dados insuficientes', 'error');
+    if (!funcionario || !jornada) return showToast('Dados insuficientes configurados para este colaborador', 'error');
 
     const pontosFiltrados = db.pontos.filter(p => 
-      p.funcionarioId === selectedFuncId && p.data >= dataInicio && p.data <= dataFim
+      p.funcionarioId === idParaProcessar && p.data >= dataInicio && p.data <= dataFim
     );
 
     let totais = { he50: 0, he100: 0, falta: 0 };
@@ -626,21 +734,26 @@ const FolhaPagamento = () => {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-800">Folha de Pagamento</h1>
+      <h1 className="text-2xl font-bold text-slate-800">{isAdmin ? 'Folha de Pagamento' : 'Meu Holerite'}</h1>
       <Card className="bg-slate-50 border-dashed border-2 p-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-          <Select label="Funcionário" value={selectedFuncId} onChange={e => setSelectedFuncId(e.target.value)} options={[{ label: '...', value: '' }, ...db.funcionarios.map(f => ({ label: f.nome, value: f.id }))]} />
+        <div className={`grid ${isAdmin ? 'grid-cols-1 md:grid-cols-4' : 'grid-cols-1 md:grid-cols-3'} gap-4 items-end`}>
+          {isAdmin && (
+            <Select label="Funcionário" value={selectedFuncId} onChange={e => setSelectedFuncId(e.target.value)} options={[{ label: '...', value: '' }, ...db.funcionarios.map(f => ({ label: f.nome, value: f.id }))]} />
+          )}
           <Input label="De" type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} />
           <Input label="Até" type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} />
-          <Button icon={FileText} onClick={processarFolha}>Gerar Holerite</Button>
+          <Button icon={FileText} onClick={processarFolha}>{isAdmin ? 'Gerar Holerite' : 'Visualizar Recibo'}</Button>
         </div>
       </Card>
       
       {calculoRealizado && (
         <Card className="max-w-3xl mx-auto p-0 overflow-hidden shadow-md border border-slate-200">
-          <div className="bg-slate-800 text-white p-6">
-            <h2 className="text-xl font-bold">Recibo de Pagamento</h2>
-            <p className="text-slate-300 text-sm">Ref: {formatDate(calculoRealizado.dataInicio)} a {formatDate(calculoRealizado.dataFim)}</p>
+          <div className="bg-slate-800 text-white p-6 flex justify-between items-center">
+            <div>
+               <h2 className="text-xl font-bold">Recibo de Pagamento</h2>
+               <p className="text-slate-300 text-sm">Ref: {formatDate(calculoRealizado.dataInicio)} a {formatDate(calculoRealizado.dataFim)}</p>
+            </div>
+            {isAdmin && <Button variant="secondary" icon={FileText} onClick={() => window.print()} className="hidden md:flex">Imprimir</Button>}
           </div>
           <table className="w-full text-sm">
              <tbody className="divide-y divide-slate-100">
@@ -653,8 +766,12 @@ const FolhaPagamento = () => {
                  <td className="px-6 py-4 text-right text-green-600 font-mono">{formatCurrency(calculoRealizado.vHE50)}</td>
                </tr>
                <tr>
-                 <td className="px-6 py-4 font-medium">Descontos / INSS</td>
-                 <td className="px-6 py-4 text-right text-red-600 font-mono">{formatCurrency(calculoRealizado.vFalta + calculoRealizado.inss)}</td>
+                 <td className="px-6 py-4 font-medium">Faltas e Atrasos ({Math.floor(calculoRealizado.totais.falta / 60)}h {calculoRealizado.totais.falta % 60}m)</td>
+                 <td className="px-6 py-4 text-right text-red-600 font-mono">- {formatCurrency(calculoRealizado.vFalta)}</td>
+               </tr>
+               <tr>
+                 <td className="px-6 py-4 font-medium">INSS (7.5%)</td>
+                 <td className="px-6 py-4 text-right text-red-600 font-mono">- {formatCurrency(calculoRealizado.inss)}</td>
                </tr>
              </tbody>
              <tfoot className="bg-slate-50 border-t-2 border-slate-200">
@@ -705,8 +822,8 @@ const LoginScreen = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(auth, email, password);
-      showToast('Bem-vindo ao Portal!');
+      await login(email, password);
+      showToast('Bem-vindo!');
     } catch (error) {
       showToast('E-mail ou senha incorretos.', 'error');
     } finally {
@@ -722,7 +839,7 @@ const LoginScreen = () => {
             <Coffee size={32} className="text-indigo-600" />
           </div>
           <h2 className="text-2xl font-bold text-white">BabáManager</h2>
-          <p className="text-indigo-200 text-sm mt-1">Acesso à Nuvem</p>
+          <p className="text-indigo-200 text-sm mt-1">Acesso ao Sistema</p>
         </div>
         <div className="p-8">
           <form onSubmit={handleLogin} className="space-y-5">
@@ -742,26 +859,40 @@ const LoginScreen = () => {
 // LAYOUT PRINCIPAL & NAVEGAÇÃO
 // ==========================================
 const AppLayout = () => {
-  const { currentRoute, setCurrentRoute, logout, dataSyncing } = useAppContext();
+  const { currentRoute, setCurrentRoute, logout, dataSyncing, currentUser } = useAppContext();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const menuItems = [
+  // REGRA DE ACESSO: Se for este e-mail, é Gestor. Senão, é Colaborador.
+  // IMPORTANTE: Mude 'seu-email-gestor@gmail.com' para o e-mail real do dono do app
+  const isAdmin = currentUser?.email === 'maxmendes@outlook.com'; 
+
+  const menuItems = isAdmin ? [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'funcionarios', label: 'Funcionários', icon: Users },
     { id: 'jornadas', label: 'Jornadas', icon: Calendar },
-    { id: 'ponto', label: 'Ponto', icon: Clock },
-    { id: 'folha', label: 'Folha', icon: DollarSign },
+    { id: 'ponto', label: 'Lançar Ponto', icon: Clock },
+    { id: 'folha', label: 'Folha Pagamento', icon: DollarSign },
     { id: 'backup', label: 'Segurança', icon: Settings },
+  ] : [
+    { id: 'ponto_colaborador', label: 'Bater Ponto', icon: Clock },
+    { id: 'folha', label: 'Meu Holerite', icon: DollarSign },
   ];
+
+  useEffect(() => {
+    if (!isAdmin && currentRoute === 'dashboard') {
+      setCurrentRoute('ponto_colaborador');
+    }
+  }, [isAdmin, currentRoute, setCurrentRoute]);
 
   const renderContent = () => {
     switch (currentRoute) {
-      case 'funcionarios': return <FuncionariosList />;
-      case 'jornadas': return <JornadasTrabalho />;
-      case 'ponto': return <ControlePonto />;
-      case 'folha': return <FolhaPagamento />;
-      case 'backup': return <Backup />;
-      default: return <Dashboard />;
+      case 'funcionarios': return isAdmin ? <FuncionariosList /> : null;
+      case 'jornadas': return isAdmin ? <JornadasTrabalho /> : null;
+      case 'ponto': return isAdmin ? <ControlePonto /> : null;
+      case 'ponto_colaborador': return <PontoColaborador />;
+      case 'folha': return <FolhaPagamento isAdmin={isAdmin} />;
+      case 'backup': return isAdmin ? <Backup /> : null;
+      default: return isAdmin ? <Dashboard /> : <PontoColaborador />;
     }
   };
 
@@ -785,7 +916,9 @@ const AppLayout = () => {
             {dataSyncing && <><Cloud size={16} className="mr-2 animate-pulse text-indigo-500" /> <span className="text-sm text-indigo-500">Sincronizando Nuvem...</span></>}
           </div>
           <div className="flex items-center space-x-4">
-             <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full">Cloud Ativo</span>
+             <span className={`text-xs px-2 py-1 rounded-full ${isAdmin ? 'bg-indigo-100 text-indigo-800' : 'bg-emerald-100 text-emerald-800'}`}>
+               {isAdmin ? 'Acesso Administrativo' : 'Perfil Colaborador'}
+             </span>
              <button onClick={logout} className="flex items-center text-sm font-medium text-slate-500 hover:text-red-600"><LogOut size={18} className="mr-1"/> Sair</button>
           </div>
         </header>
