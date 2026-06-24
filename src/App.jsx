@@ -71,35 +71,55 @@ const calculateWeeklyHours = (jornada) => {
   return totalMins / 60;
 };
 
-const calculateMonthlyHours = (weeklyHours) => (weeklyHours * 30) / 7;
+const calculateMonthlyHours = (weeklyHours) => {
+  if (weeklyHours === 0) return 220; // Fallback padrão caso não haja jornada
+  return (weeklyHours * 30) / 7;
+};
 
 // ==========================================
 // FIRESTORE CLOUD SERVICE
 // ==========================================
-// NOTA: Para o colaborador funcionar 100% no futuro, a query precisará buscar pelo 'empresaId' em vez de 'userId'
 const CloudService = {
-  getFuncionarios: async (uid) => {
-    const q = query(collection(dbFirestore, 'funcionarios'), where('userId', '==', uid));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  getFuncionarios: async (uid, isAdmin, email) => {
+    if (isAdmin) {
+      const q = query(collection(dbFirestore, 'funcionarios'), where('userId', '==', uid));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } else {
+      const q = query(collection(dbFirestore, 'funcionarios'), where('emailAcesso', '==', email));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    }
   },
   saveFuncionario: async (uid, func) => await addDoc(collection(dbFirestore, 'funcionarios'), { ...func, userId: uid }),
   updateFuncionario: async (id, data) => await updateDoc(doc(dbFirestore, 'funcionarios', id), data),
   deleteFuncionario: async (id) => await deleteDoc(doc(dbFirestore, 'funcionarios', id)),
   
-  getJornadas: async (uid) => {
-    const q = query(collection(dbFirestore, 'jornadas'), where('userId', '==', uid));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  getJornadas: async (uid, isAdmin, funcId) => {
+    if (isAdmin) {
+      const q = query(collection(dbFirestore, 'jornadas'), where('userId', '==', uid));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } else {
+      const q = query(collection(dbFirestore, 'jornadas'), where('funcionarioId', '==', funcId));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    }
   },
-  saveJornada: async (uid, funcId, jornadaData) => await setDoc(doc(dbFirestore, 'jornadas', funcId), { ...jornadaData, funcionarioId: funcId, userId: uid }),
+  saveJornada: async (uid, funcId, jornadaData) => await setDoc(doc(doc(dbFirestore, 'jornadas', funcId)), { ...jornadaData, funcionarioId: funcId, userId: uid }),
   
-  getRegistrosPonto: async (uid) => {
-    const q = query(collection(dbFirestore, 'pontos'), where('userId', '==', uid));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  getRegistrosPonto: async (uid, isAdmin, funcId) => {
+    if (isAdmin) {
+      const q = query(collection(dbFirestore, 'pontos'), where('userId', '==', uid));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } else {
+      const q = query(collection(dbFirestore, 'pontos'), where('funcionarioId', '==', funcId));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    }
   },
-  saveRegistroPonto: async (uid, registro) => await addDoc(collection(dbFirestore, 'pontos'), { ...registro, userId: uid }),
+  saveRegistroPonto: async (adminUid, registro) => await addDoc(collection(dbFirestore, 'pontos'), { ...registro, userId: adminUid }),
   updateRegistroPonto: async (id, data) => await updateDoc(doc(dbFirestore, 'pontos', id), data),
   deleteRegistroPonto: async (id) => await deleteDoc(doc(dbFirestore, 'pontos', id))
 };
@@ -118,6 +138,10 @@ const AppProvider = ({ children }) => {
   const [dataSyncing, setDataSyncing] = useState(false);
   const [db, setDb] = useState({ funcionarios: [], jornadas: [], pontos: [] });
 
+  // COLOQUE O SEU E-MAIL ADMINISTRATIVO REAL AQUI
+  const GESTOR_EMAIL = 'maxmendes@outlook.com'; 
+  const isAdmin = currentUser?.email === GESTOR_EMAIL;
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
@@ -132,9 +156,14 @@ const AppProvider = ({ children }) => {
       setDataSyncing(true);
       try {
         const uid = currentUser.uid;
-        const funcs = await CloudService.getFuncionarios(uid);
-        const jorna = await CloudService.getJornadas(uid);
-        const pts = await CloudService.getRegistrosPonto(uid);
+        const email = currentUser.email;
+
+        const funcs = await CloudService.getFuncionarios(uid, isAdmin, email);
+        const activeFuncId = !isAdmin && funcs.length > 0 ? funcs[0].id : '';
+
+        const jorna = await CloudService.getJornadas(uid, isAdmin, activeFuncId);
+        const pts = await CloudService.getRegistrosPonto(uid, isAdmin, activeFuncId);
+        
         setDb({ funcionarios: funcs, jornadas: jorna, pontos: pts });
       } catch (error) {
         console.error("Erro ao sincronizar nuvem:", error);
@@ -144,7 +173,7 @@ const AppProvider = ({ children }) => {
       }
     };
     loadCloudData();
-  }, [currentUser, refreshTrigger]);
+  }, [currentUser, refreshTrigger, isAdmin]);
 
   const login = async (email, password) => signInWithEmailAndPassword(auth, email, password);
   const logout = async () => { await signOut(auth); setCurrentRoute('dashboard'); };
@@ -157,7 +186,7 @@ const AppProvider = ({ children }) => {
   return (
     <AppContext.Provider value={{ 
       currentRoute, setCurrentRoute, db, refreshData, showToast,
-      currentUser, login, logout, authLoading, dataSyncing
+      currentUser, login, logout, authLoading, dataSyncing, isAdmin
     }}>
       {children}
       {toast && (
@@ -214,7 +243,7 @@ const Select = ({ label, value, onChange, options, className = '' }) => (
 // MÓDULO: PONTO DO COLABORADOR (MOBILE-FIRST)
 // ==========================================
 const PontoColaborador = () => {
-  const { db, currentUser, refreshData, showToast } = useAppContext();
+  const { db, refreshData, showToast } = useAppContext();
   const [horaAtual, setHoraAtual] = useState(new Date());
   const [isSaving, setIsSaving] = useState(false);
   const hoje = getTodayLocal();
@@ -224,8 +253,6 @@ const PontoColaborador = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Para esta versão, assumimos que o colaborador conectado é o primeiro da lista
-  // (Em um ambiente real multi-inquilino, isso seria filtrado pelo e-mail/uid do funcionário)
   const colaborador = db.funcionarios[0]; 
   const pontoHoje = db.pontos.find(p => p.funcionarioId === colaborador?.id && p.data === hoje);
 
@@ -260,13 +287,17 @@ const PontoColaborador = () => {
       return showToast('Todos os pontos de hoje já foram preenchidos.', 'error');
     }
 
-    const pontoData = { funcionarioId: colaborador.id, data: hoje, ...novosRegistros };
+    const pontoData = { 
+      funcionarioId: colaborador.id, 
+      data: hoje, 
+      ...novosRegistros 
+    };
 
     try {
       if (pontoHoje?.id) {
         await CloudService.updateRegistroPonto(pontoHoje.id, pontoData);
       } else {
-        await CloudService.saveRegistroPonto(currentUser.uid, pontoData);
+        await CloudService.saveRegistroPonto(colaborador.userId, pontoData);
       }
       refreshData();
     } catch (e) {
@@ -447,6 +478,7 @@ const FuncionariosList = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input label="Nome Completo" value={currentFunc?.nome || ''} onChange={e => setCurrentFunc({...currentFunc, nome: e.target.value})} required className="md:col-span-2" />
               <Input label="CPF" value={currentFunc?.cpf || ''} onChange={e => setCurrentFunc({...currentFunc, cpf: e.target.value})} required />
+              <Input label="E-mail de Acesso (Login Colaborador)" type="email" value={currentFunc?.emailAcesso || ''} onChange={e => setCurrentFunc({...currentFunc, emailAcesso: e.target.value})} required />
               <Input label="Data de Admissão" type="date" value={currentFunc?.dataAdmissao || ''} onChange={e => setCurrentFunc({...currentFunc, dataAdmissao: e.target.value})} required />
               <Input label="Salário Base (R$)" type="number" value={currentFunc?.salario || ''} onChange={e => setCurrentFunc({...currentFunc, salario: e.target.value})} required />
             </div>
@@ -466,11 +498,12 @@ const FuncionariosList = () => {
       <Card className="p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-600 min-w-[600px]">
-            <thead className="bg-slate-50 border-b"><tr><th className="px-6 py-4">Nome</th><th className="px-6 py-4">Salário</th><th className="px-6 py-4">Admissão</th><th className="px-6 py-4 text-right">Ações</th></tr></thead>
+            <thead className="bg-slate-50 border-b"><tr><th className="px-6 py-4">Nome</th><th className="px-6 py-4">E-mail Acesso</th><th className="px-6 py-4">Salário</th><th className="px-6 py-4">Admissão</th><th className="px-6 py-4 text-right">Ações</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {db.funcionarios.map(f => (
                 <tr key={f.id} className="hover:bg-slate-50">
                   <td className="px-6 py-4 font-medium text-slate-800">{f.nome}</td>
+                  <td className="px-6 py-4 text-slate-500 font-mono text-xs">{f.emailAcesso || 'Não cadastrado'}</td>
                   <td className="px-6 py-4 font-mono text-green-700">{formatCurrency(f.salario)}</td>
                   <td className="px-6 py-4">{formatDate(f.dataAdmissao)}</td>
                   <td className="px-6 py-4 text-right">
@@ -531,7 +564,7 @@ const JornadasTrabalho = () => {
           <div className="space-y-6">
             <div className="bg-indigo-50 p-4 rounded-lg flex space-x-8 border border-indigo-100">
               <div><p className="text-sm text-indigo-800 font-medium">Total Semanal</p><p className="text-2xl font-bold text-indigo-600">{calculateWeeklyHours(jornada).toFixed(1)}h</p></div>
-              <div><p className="text-sm text-indigo-800 font-medium">Total Mensal</p><p className="text-2xl font-bold text-indigo-600">{calculateMonthlyHours(calculateWeeklyHours(jornada)).toFixed(2)}h</p></div>
+              <div><p className="text-sm text-indigo-800 font-medium">Total Divisor Mensal</p><p className="text-2xl font-bold text-indigo-600">{calculateMonthlyHours(calculateWeeklyHours(jornada)).toFixed(1)}h</p></div>
             </div>
             <div className="border border-slate-200 rounded-lg overflow-x-auto">
               <table className="w-full text-left text-sm min-w-[500px]">
@@ -651,11 +684,10 @@ const ControlePonto = () => {
 };
 
 // ==========================================
-// MÓDULO: FOLHA DE PAGAMENTO
+// MÓDULO: FOLHA DE PAGAMENTO (DINÂMICO)
 // ==========================================
-const FolhaPagamento = ({ isAdmin }) => {
-  const { db, showToast } = useAppContext();
-  // Se for admin permite escolher, se não, fixa no funcionário [0]
+const FolhaPagamento = () => {
+  const { db, showToast, isAdmin } = useAppContext();
   const [selectedFuncId, setSelectedFuncId] = useState('');
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
@@ -678,7 +710,7 @@ const FolhaPagamento = ({ isAdmin }) => {
     const funcionario = db.funcionarios.find(f => f.id === idParaProcessar);
     const jornada = db.jornadas.find(j => j.funcionarioId === idParaProcessar);
     
-    if (!funcionario || !jornada) return showToast('Dados insuficientes configurados para este colaborador', 'error');
+    if (!funcionario || !jornada) return showToast('Dados insuficientes configurados para gerar o recibo', 'error');
 
     const pontosFiltrados = db.pontos.filter(p => 
       p.funcionarioId === idParaProcessar && p.data >= dataInicio && p.data <= dataFim
@@ -705,6 +737,7 @@ const FolhaPagamento = ({ isAdmin }) => {
       
       const esperado = (conf?.ativo) ? (timeToMinutes(conf.saida || "00:00") - timeToMinutes(conf.entrada || "00:00") - timeToMinutes(conf.intervalo || "00:00")) : 0;
 
+      // Se o dia não for de trabalho ativo na jornada ou for domingo, tudo vira 100%
       if (!conf?.ativo || diaSemana === 'domingo') {
           if (trabalhado > 0) totais.he100 += trabalhado;
       } else {
@@ -717,18 +750,28 @@ const FolhaPagamento = ({ isAdmin }) => {
     });
 
     const salarioBase = Number(funcionario.salario) || 0;
-    const valorHora = salarioBase / 220; 
     
-    const minutosExtrasTotais = totais.he50 + totais.he100;
-    const vHE50 = (minutosExtrasTotais / 60) * valorHora * 1.5;
+    // BASE DINÂMICA: Descobre as horas semanais e calcula o divisor mensal real
+    const horasSemanaisReal = calculateWeeklyHours(jornada);
+    const divisorMensalDinamico = calculateMonthlyHours(horasSemanaisReal);
+    
+    // O valor da hora agora varia de acordo com o cadastro
+    const valorHora = salarioBase / divisorMensalDinamico; 
+    
+    // Separação cirúrgica dos adicionais financeiros (50% vs 100%)
+    const vHE50 = (totais.he50 / 60) * valorHora * 1.5;
+    const vHE100 = (totais.he100 / 60) * valorHora * 2.0;
+    
     const vFalta = (totais.falta / 60) * valorHora;
     const inss = salarioBase * 0.075;
     
     setCalculoRealizado({
       funcionario, dataInicio, dataFim, base: salarioBase,
-      vHE50: vHE50, vHE100: 0, vFalta: vFalta, inss: inss,
-      liquido: salarioBase + vHE50 - vFalta - inss,
-      totais: { he: minutosExtrasTotais, falta: totais.falta }
+      vHE50: vHE50, 
+      vHE100: vHE100,
+      vFalta: vFalta, inss: inss,
+      liquido: salarioBase + vHE50 + vHE100 - vFalta - inss,
+      totais: { he: (totais.he50 + totais.he100), falta: totais.falta }
     });
   };
 
@@ -763,7 +806,8 @@ const FolhaPagamento = ({ isAdmin }) => {
                </tr>
                <tr>
                  <td className="px-6 py-4 font-medium">Horas Extras ({Math.floor(calculoRealizado.totais.he / 60)}h {calculoRealizado.totais.he % 60}m)</td>
-                 <td className="px-6 py-4 text-right text-green-600 font-mono">{formatCurrency(calculoRealizado.vHE50)}</td>
+                 {/* Exibe o somatório das horas extras calculadas a 50% e 100% de forma transparente */}
+                 <td className="px-6 py-4 text-right text-green-600 font-mono">{formatCurrency(calculoRealizado.vHE50 + calculoRealizado.vHE100)}</td>
                </tr>
                <tr>
                  <td className="px-6 py-4 font-medium">Faltas e Atrasos ({Math.floor(calculoRealizado.totais.falta / 60)}h {calculoRealizado.totais.falta % 60}m)</td>
@@ -859,12 +903,8 @@ const LoginScreen = () => {
 // LAYOUT PRINCIPAL & NAVEGAÇÃO
 // ==========================================
 const AppLayout = () => {
-  const { currentRoute, setCurrentRoute, logout, dataSyncing, currentUser } = useAppContext();
+  const { currentRoute, setCurrentRoute, logout, dataSyncing, isAdmin } = useAppContext();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  // REGRA DE ACESSO: Se for este e-mail, é Gestor. Senão, é Colaborador.
-  // IMPORTANTE: Mude 'seu-email-gestor@gmail.com' para o e-mail real do dono do app
-  const isAdmin = currentUser?.email === 'maxmendes@outlook.com'; 
 
   const menuItems = isAdmin ? [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
@@ -890,7 +930,7 @@ const AppLayout = () => {
       case 'jornadas': return isAdmin ? <JornadasTrabalho /> : null;
       case 'ponto': return isAdmin ? <ControlePonto /> : null;
       case 'ponto_colaborador': return <PontoColaborador />;
-      case 'folha': return <FolhaPagamento isAdmin={isAdmin} />;
+      case 'folha': return <FolhaPagamento />;
       case 'backup': return isAdmin ? <Backup /> : null;
       default: return isAdmin ? <Dashboard /> : <PontoColaborador />;
     }
