@@ -1,9 +1,8 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { 
   Home, Users, Calendar, Clock, DollarSign, FileText, 
-  Settings, Download, Upload, Plus, Edit2, Trash2, 
-  Menu, AlertCircle, CheckCircle, ChevronRight,
-  Briefcase, Coffee, ArrowLeftCircle, LogOut, Lock, Mail, Cloud
+  Settings, Plus, Edit2, Trash2, Menu, AlertCircle, 
+  CheckCircle, ArrowLeftCircle, LogOut, Coffee, Cloud 
 } from 'lucide-react';
 
 // ==========================================
@@ -27,8 +26,22 @@ const auth = getAuth(app);
 const dbFirestore = getFirestore(app);
 
 // ==========================================
-// UTILS & HELPER FUNCTIONS
+// UTILS & HELPER FUNCTIONS (TRATAMENTO SEGURO)
 // ==========================================
+const timeToMinutes = (timeStr) => {
+  if (!timeStr || typeof timeStr !== 'string') return 0;
+  const parts = timeStr.split(':');
+  if (parts.length !== 2) return 0;
+  return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+};
+
+const formatarTempo = (minutos) => {
+  if (isNaN(minutos) || minutos < 0) minutos = 0;
+  const h = Math.floor(minutos / 60);
+  const m = Math.round(minutos % 60);
+  return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m`;
+};
+
 const formatDate = (dateString) => {
   if (!dateString) return '';
   const [year, month, day] = dateString.split('-');
@@ -42,26 +55,28 @@ const getTodayLocal = () => {
 
 const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
 
-const timeToMinutes = (timeStr) => {
-  if (!timeStr || typeof timeStr !== 'string') return 0;
-  const parts = timeStr.split(':');
-  if (parts.length !== 2) return 0;
-  return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+const calculateWeeklyHours = (jornada) => {
+  if (!jornada) return 0;
+  let totalMins = 0;
+  const days = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo'];
+  days.forEach(day => {
+    const config = jornada[day];
+    if (config && config.ativo) {
+      const start = timeToMinutes(config.entrada);
+      const end = timeToMinutes(config.saida);
+      const interval = timeToMinutes(config.intervalo || "00:00");
+      if (end > start) totalMins += (end - start - interval);
+    }
+  });
+  return totalMins / 60;
 };
 
-const formatarTempo = (minutos) => {
-  if (isNaN(minutos) || minutos < 0) minutos = 0;
-  const h = Math.floor(minutos / 60);
-  const m = Math.round(minutos % 60);
-  if (h === 0 && m === 0) return '00h 00m';
-  return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m`;
-};
+const calculateMonthlyHours = (weeklyHours) => (weeklyHours * 30) / 7;
 
 // ==========================================
 // FIRESTORE CLOUD SERVICE
 // ==========================================
 const CloudService = {
-  // Funcionários
   getFuncionarios: async (uid) => {
     const q = query(collection(dbFirestore, 'funcionarios'), where('userId', '==', uid));
     const snap = await getDocs(q);
@@ -76,19 +91,14 @@ const CloudService = {
   deleteFuncionario: async (id) => {
     await deleteDoc(doc(dbFirestore, 'funcionarios', id));
   },
-
-  // Jornadas
   getJornadas: async (uid) => {
     const q = query(collection(dbFirestore, 'jornadas'), where('userId', '==', uid));
     const snap = await getDocs(q);
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   },
   saveJornada: async (uid, funcId, jornadaData) => {
-    // Usamos o ID do funcionário como ID do documento para facilitar
     await setDoc(doc(dbFirestore, 'jornadas', funcId), { ...jornadaData, funcionarioId: funcId, userId: uid });
   },
-
-  // Pontos
   getRegistrosPonto: async (uid) => {
     const q = query(collection(dbFirestore, 'pontos'), where('userId', '==', uid));
     const snap = await getDocs(q);
@@ -114,14 +124,11 @@ const AppProvider = ({ children }) => {
   const [currentRoute, setCurrentRoute] = useState('dashboard');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [toast, setToast] = useState(null);
-  
-  // Autenticação e Dados
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [dataSyncing, setDataSyncing] = useState(false);
   const [db, setDb] = useState({ funcionarios: [], jornadas: [], pontos: [] });
 
-  // 1. Escuta o Login do Firebase
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
@@ -130,7 +137,6 @@ const AppProvider = ({ children }) => {
     return () => unsubscribe();
   }, []);
 
-  // 2. Carrega os dados da Nuvem sempre que logar ou pedir atualização
   useEffect(() => {
     const loadCloudData = async () => {
       if (!currentUser) return;
@@ -142,7 +148,7 @@ const AppProvider = ({ children }) => {
         const pts = await CloudService.getRegistrosPonto(uid);
         setDb({ funcionarios: funcs, jornadas: jorna, pontos: pts });
       } catch (error) {
-        console.error("Erro ao buscar dados da nuvem:", error);
+        console.error("Erro ao sincronizar nuvem:", error);
         showToast("Erro ao conectar com a nuvem.", "error");
       } finally {
         setDataSyncing(false);
@@ -179,7 +185,7 @@ const AppProvider = ({ children }) => {
 const useAppContext = () => useContext(AppContext);
 
 // ==========================================
-// UI COMPONENTS (Cards, Buttons, Inputs)
+// COMPONENTES DE INTERFACE BASE
 // ==========================================
 const Card = ({ children, className = '' }) => (
   <div className={`bg-white rounded-xl shadow-sm border border-slate-200 p-6 ${className}`}>{children}</div>
@@ -216,72 +222,8 @@ const Select = ({ label, value, onChange, options, className = '' }) => (
 );
 
 // ==========================================
-// DOMAIN LOGIC
+// MÓDULO: DASHBOARD (ALINHADO COM A FOLHA)
 // ==========================================
-const calculateWeeklyHours = (jornada) => {
-  if (!jornada) return 0;
-  let totalMins = 0;
-  const days = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo'];
-  days.forEach(day => {
-    const config = jornada[day];
-    if (config && config.ativo) {
-      const start = timeToMinutes(config.entrada);
-      const end = timeToMinutes(config.saida);
-      const interval = timeToMinutes(config.intervalo);
-      if (end > start) totalMins += (end - start - interval);
-    }
-  });
-  return totalMins / 60;
-};
-
-const calculateMonthlyHours = (weeklyHours) => (weeklyHours * 30) / 7;
-
-// ==========================================
-// SCREENS & MODULES
-// ==========================================
-const LoginScreen = () => {
-  const { login, showToast } = useAppContext();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      await login(email, password);
-      showToast('Bem-vindo ao Portal!');
-    } catch (error) {
-      showToast('E-mail ou senha incorretos.', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
-        <div className="bg-indigo-600 p-8 text-center">
-          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
-            <Coffee size={32} className="text-indigo-600" />
-          </div>
-          <h2 className="text-2xl font-bold text-white">BabáManager</h2>
-          <p className="text-indigo-200 text-sm mt-1">Acesso à Nuvem</p>
-        </div>
-        <div className="p-8">
-          <form onSubmit={handleLogin} className="space-y-5">
-            <Input label="E-mail" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-            <Input label="Senha" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-            <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-70">
-              {loading ? 'Autenticando...' : 'Entrar'}
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 const Dashboard = () => {
   const { db } = useAppContext();
   const [mesAno, setMesAno] = useState(() => {
@@ -290,44 +232,43 @@ const Dashboard = () => {
   });
   
   const ativos = db.funcionarios.filter(f => f.status !== 'inativo').length;
-  const pontosMesFiltrado = db.pontos.filter(p => {
-    if (!p.data) return false;
-    const [year, month] = p.data.split('-');
-    return `${year}-${month}` === mesAno;
-  });
+  const pontosMesFiltrado = db.pontos.filter(p => p.data && p.data.substring(0, 7) === mesAno);
 
-  let totalMinutosTrabalhados = 0; let totalMinutosExtras50 = 0; let totalMinutosExtras100 = 0;
+  let totalMinutosTrabalhados = 0; 
+  let totalMinutosExtras50 = 0; 
+  let totalMinutosExtras100 = 0;
   const diasMapa = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
 
   pontosMesFiltrado.forEach(p => {
     const jornada = db.jornadas.find(j => j.funcionarioId === p.funcionarioId);
     if (!jornada) return;
 
-    const e1 = p.entrada1 ? timeToMinutes(p.entrada1) : null; const s1 = p.saida1 ? timeToMinutes(p.saida1) : null;
-    const e2 = p.entrada2 ? timeToMinutes(p.entrada2) : null; const s2 = p.saida2 ? timeToMinutes(p.saida2) : null;
+    const e1 = timeToMinutes(p.entrada1 || "00:00");
+    const s1 = timeToMinutes(p.saida1 || "00:00");
+    const e2 = timeToMinutes(p.entrada2 || "00:00");
+    const s2 = timeToMinutes(p.saida2 || "00:00");
 
     let minsTrabalhados = 0;
-    if (e1 !== null && s1 !== null && e2 !== null && s2 !== null) minsTrabalhados = (s1 - e1) + (s2 - e2);
-    else if (e1 !== null && s1 !== null && e2 === null && s2 === null) minsTrabalhados = s1 - e1;
-    else if (e1 !== null && s1 === null && e2 === null && s2 !== null) minsTrabalhados = s2 - e1;
-    else minsTrabalhados = ((s1 !== null && e1 !== null && s1 > e1) ? (s1 - e1) : 0) + ((s2 !== null && e2 !== null && s2 > e2) ? (s2 - e2) : 0);
+    if (e1 > 0 && s1 > 0) minsTrabalhados += (s1 - e1);
+    if (e2 > 0 && s2 > 0) minsTrabalhados += (s2 - e2);
+    if (e1 > 0 && s2 > 0 && s1 === 0 && e2 === 0) minsTrabalhados = (s2 - e1);
 
-    if (minsTrabalhados < 0) minsTrabalhados = 0;
     totalMinutosTrabalhados += minsTrabalhados;
 
-    const [pAno, pMes, pDia] = p.data.split('-');
-    const dateObj = new Date(pAno, pMes - 1, pDia);
+    const dateObj = new Date(p.data.split('-').join('/'));
     const diaSemana = diasMapa[dateObj.getDay()];
-
     const configDia = jornada[diaSemana];
+
     let minsEsperados = 0;
     if (configDia && configDia.ativo) {
-       const expE = timeToMinutes(configDia.entrada); const expS = timeToMinutes(configDia.saida); const expI = timeToMinutes(configDia.intervalo);
-       if (expS > expE) minsEsperados = (expS - expE) - expI;
+       minsEsperados = timeToMinutes(configDia.saida) - timeToMinutes(configDia.entrada) - timeToMinutes(configDia.intervalo || "00:00");
     }
 
-    if (diaSemana === 'domingo' || (!configDia || !configDia.ativo)) totalMinutosExtras100 += minsTrabalhados;
-    else if (minsTrabalhados > minsEsperados) totalMinutosExtras50 += (minsTrabalhados - minsEsperados);
+    if (diaSemana === 'domingo' || !configDia?.ativo) {
+      totalMinutosExtras100 += minsTrabalhados;
+    } else if (minsTrabalhados > minsEsperados) {
+      totalMinutosExtras50 += (minsTrabalhados - minsEsperados);
+    }
   });
 
   const [anoStr, mesStr] = mesAno.split('-');
@@ -352,6 +293,9 @@ const Dashboard = () => {
   );
 };
 
+// ==========================================
+// MÓDULO: LISTA DE FUNCIONÁRIOS
+// ==========================================
 const FuncionariosList = () => {
   const { db, refreshData, showToast, currentUser } = useAppContext();
   const [isEditing, setIsEditing] = useState(false);
@@ -438,11 +382,14 @@ const FuncionariosList = () => {
   );
 };
 
+// ==========================================
+// MÓDULO: JORNADAS DE TRABALHO
+// ==========================================
 const JornadasTrabalho = () => {
   const { db, refreshData, showToast, currentUser } = useAppContext();
   const [selectedFuncId, setSelectedFuncId] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const defaultDay = { ativo: true, entrada: '08:00', saida: '17:00', intervalo: '01:00' };
+  const defaultDay = { ativo: true, entrada: '08:00', saida: '17:00', intervalo: '00:00' };
   const [jornada, setJornada] = useState({ segunda: { ...defaultDay }, terca: { ...defaultDay }, quarta: { ...defaultDay }, quinta: { ...defaultDay }, sexta: { ...defaultDay }, sabado: { ...defaultDay, ativo: false }, domingo: { ...defaultDay, ativo: false } });
 
   useEffect(() => {
@@ -491,7 +438,7 @@ const JornadasTrabalho = () => {
                       <td className="px-4 py-3 text-center"><input type="checkbox" checked={jornada[key]?.ativo || false} onChange={(e) => handleDayChange(key, 'ativo', e.target.checked)} className="w-4 h-4 cursor-pointer" /></td>
                       <td className="px-4 py-3"><input type="time" value={jornada[key]?.entrada || ''} disabled={!jornada[key]?.ativo} onChange={(e) => handleDayChange(key, 'entrada', e.target.value)} className="px-2 py-1 border rounded text-sm w-full" /></td>
                       <td className="px-4 py-3"><input type="time" value={jornada[key]?.saida || ''} disabled={!jornada[key]?.ativo} onChange={(e) => handleDayChange(key, 'saida', e.target.value)} className="px-2 py-1 border rounded text-sm w-full" /></td>
-                      <td className="px-4 py-3"><input type="time" value={jornada[key]?.intervalo || ''} disabled={!jornada[key]?.ativo} onChange={(e) => handleDayChange(key, 'intervalo', e.target.value)} className="px-2 py-1 border rounded text-sm w-full" /></td>
+                      <td className="px-4 py-3"><input type="time" value={jornada[key]?.intervalo || '00:00'} disabled={!jornada[key]?.ativo} onChange={(e) => handleDayChange(key, 'intervalo', e.target.value)} className="px-2 py-1 border rounded text-sm w-full" /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -504,6 +451,9 @@ const JornadasTrabalho = () => {
   );
 };
 
+// ==========================================
+// MÓDULO: CONTROLE DE PONTO
+// ==========================================
 const ControlePonto = () => {
   const { db, refreshData, showToast, currentUser } = useAppContext();
   const [date, setDate] = useState(getTodayLocal());
@@ -544,13 +494,6 @@ const ControlePonto = () => {
     }
   };
 
-  const renderTimeInput = (label, field) => (
-    <div className="flex flex-col space-y-1">
-      <div className="flex justify-between items-center"><label className="text-sm font-medium">{label}</label><button type="button" onClick={() => setTimeNow(field)} className="text-[11px] text-indigo-600 font-bold bg-indigo-50 px-2 rounded">Agora</button></div>
-      <input type="time" value={records[field]} onChange={e => setRecords({...records, [field]: e.target.value})} className="w-full px-3 py-3 border border-slate-300 rounded-lg text-lg text-center font-mono focus:ring-indigo-500" />
-    </div>
-  );
-
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-800">Controle de Ponto</h1>
@@ -562,8 +505,18 @@ const ControlePonto = () => {
             <div className="flex justify-between items-center"><label className="text-sm font-medium">Data</label><button type="button" onClick={() => setDate(getTodayLocal())} className="text-[11px] text-indigo-600 font-bold bg-indigo-50 px-2 rounded">Hoje</button></div>
             <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full px-3 py-3 border border-slate-300 rounded-lg text-lg text-center" />
           </div>
-          <div className="grid grid-cols-2 gap-4">{renderTimeInput("Entrada", "entrada1")}{renderTimeInput("Saída Int.", "saida1")}{renderTimeInput("Ret. Int.", "entrada2")}{renderTimeInput("Saída Final", "saida2")}</div>
-          <Button className="w-full justify-center py-3 text-lg" icon={Cloud} onClick={handleSavePonto} disabled={isSaving}>{isSaving ? 'Enviando...' : (editingId ? 'Atualizar Nuvem' : 'Salvar na Nuvem')}</Button>
+          <div className="grid grid-cols-2 gap-4">
+            {['entrada1', 'saida1', 'entrada2', 'saida2'].map((field, idx) => (
+              <div key={field} className="flex flex-col space-y-1">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-medium text-slate-500">{['Entrada 1', 'Saída 1', 'Entrada 2', 'Saída 2'][idx]}</label>
+                  <button type="button" onClick={() => setTimeNow(field)} className="text-[10px] text-indigo-600 font-bold px-1.5 bg-indigo-50 rounded">Agora</button>
+                </div>
+                <input type="time" value={records[field]} onChange={e => setRecords({...records, [field]: e.target.value})} className="w-full px-2 py-2 border rounded-lg text-center font-mono" />
+              </div>
+            ))}
+          </div>
+          <Button className="w-full justify-center py-3 text-lg" icon={Cloud} onClick={handleSavePonto} disabled={isSaving}>{isSaving ? 'Enviando...' : 'Salvar na Nuvem'}</Button>
         </Card>
         <Card className="lg:col-span-2 p-0 overflow-hidden flex flex-col">
           <div className="p-4 border-b bg-white"><h3 className="font-semibold">Últimos Registros (Nuvem)</h3></div>
@@ -576,7 +529,7 @@ const ControlePonto = () => {
                         <td className="px-4 py-3">{formatDate(p.data)}</td>
                         <td className="px-4 py-3 font-medium">{db.funcionarios.find(f => f.id === p.funcionarioId)?.nome || 'Desconhecido'}</td>
                         <td className="px-4 py-3 text-center font-mono bg-emerald-50/50">{p.entrada1 || '-'}</td>
-                        <td className="px-4 py-3 text-center font-mono bg-orange-50/50">{p.saida2 || '-'}</td>
+                        <td className="px-4 py-3 text-center font-mono bg-orange-50/50">{p.saida2 || p.saida1 || '-'}</td>
                         <td className="px-4 py-3 text-right space-x-2">
                           <button onClick={() => handleEdit(p)} className="p-2 text-slate-400 hover:text-indigo-600"><Edit2 size={16} /></button>
                           <button onClick={() => handleDelete(p.id)} className="p-2 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button>
@@ -592,6 +545,9 @@ const ControlePonto = () => {
   );
 };
 
+// ==========================================
+// MÓDULO: FOLHA DE PAGAMENTO (MATEMÁTICA REAL)
+// ==========================================
 const FolhaPagamento = () => {
   const { db, showToast } = useAppContext();
   const [selectedFuncId, setSelectedFuncId] = useState('');
@@ -599,7 +555,6 @@ const FolhaPagamento = () => {
   const [dataFim, setDataFim] = useState('');
   const [calculoRealizado, setCalculoRealizado] = useState(null);
 
-  // Define período padrão na montagem
   useEffect(() => {
     const hoje = new Date();
     let anoAtual = hoje.getFullYear(); let mesAtual = hoje.getMonth() + 1;
@@ -610,93 +565,64 @@ const FolhaPagamento = () => {
   }, []);
 
   const processarFolha = () => {
-  if (!selectedFuncId || !dataInicio || !dataFim) {
-    showToast('Selecione funcionário e período.', 'error');
-    return;
-  }
+    if (!selectedFuncId || !dataInicio || !dataFim) return showToast('Preencha os campos', 'error');
 
-  const funcionario = db.funcionarios.find(f => f.id === selectedFuncId);
-  const jornada = db.jornadas.find(j => j.funcionarioId === selectedFuncId);
+    const funcionario = db.funcionarios.find(f => f.id === selectedFuncId);
+    const jornada = db.jornadas.find(j => j.funcionarioId === selectedFuncId);
+    
+    if (!funcionario || !jornada) return showToast('Dados insuficientes', 'error');
 
-  if (!funcionario) return showToast('Funcionário não encontrado.', 'error');
-  if (!jornada) return showToast('Jornada não configurada para este funcionário.', 'error');
+    const pontosFiltrados = db.pontos.filter(p => 
+      p.funcionarioId === selectedFuncId && p.data >= dataInicio && p.data <= dataFim
+    );
 
-  const salarioBase = Number(funcionario.salario) || 0;
-  
-  // Filtro rigoroso: apenas os pontos deste ID no intervalo de datas
-  const pontosPeriodo = db.pontos.filter(p => 
-    p.funcionarioId === selectedFuncId && 
-    p.data >= dataInicio && 
-    p.data <= dataFim
-  );
+    let totais = { he50: 0, he100: 0, falta: 0 };
+    const pontosUnicos = {};
+    pontosFiltrados.forEach(p => pontosUnicos[p.data] = p); 
 
-  let totais = { he50: 0, he100: 0, falta: 0 };
+    Object.values(pontosUnicos).forEach(p => {
+      const e1 = timeToMinutes(p.entrada1 || "00:00");
+      const s1 = timeToMinutes(p.saida1 || "00:00");
+      const e2 = timeToMinutes(p.entrada2 || "00:00");
+      const s2 = timeToMinutes(p.saida2 || "00:00");
+      
+      let trabalhado = 0;
+      if (e1 > 0 && s1 > 0) trabalhado += (s1 - e1);
+      if (e2 > 0 && s2 > 0) trabalhado += (s2 - e2);
+      if (e1 > 0 && s2 > 0 && s1 === 0 && e2 === 0) trabalhado = (s2 - e1);
+      if (e1 > 0 && s1 > 0 && e2 === 0 && s2 === 0) trabalhado = (s1 - e1);
 
-  // Ajuste na função processarFolha dentro do loop forEach:
-// 1. Criamos um objeto para filtrar apenas o registro mais recente por data
-const pontosUnicos = {};
+      const diaSemana = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'][new Date(p.data.split('-').join('/')).getDay()];
+      const conf = jornada[diaSemana];
+      
+      const esperado = (conf?.ativo) ? (timeToMinutes(conf.saida || "00:00") - timeToMinutes(conf.entrada || "00:00") - timeToMinutes(conf.intervalo || "00:00")) : 0;
 
-pontosPeriodo.forEach(p => {
-    // Se a data já existe, logamos um aviso no console para você saber que há lixo no banco
-    if (pontosUnicos[p.data]) {
-        console.warn(`Deduplicando: Registro ignorado para a data ${p.data}`);
-    }
-    // Armazenamos apenas um registro por data
-    pontosUnicos[p.data] = p;
-});
+      if (!conf?.ativo || diaSemana === 'domingo') {
+          if (trabalhado > 0) totais.he100 += trabalhado;
+      } else {
+          if (trabalhado > esperado) {
+              totais.he50 += (trabalhado - esperado);
+          } else if (trabalhado < esperado && trabalhado > 0) {
+              totais.falta += (esperado - trabalhado);
+          }
+      }
+    });
 
-// 2. Agora fazemos o cálculo usando apenas os registros únicos
-Object.values(pontosUnicos).forEach(p => {
-    const e1 = timeToMinutes(p.entrada1 || "00:00");
-    const s1 = timeToMinutes(p.saida1 || "00:00");
-    const e2 = timeToMinutes(p.entrada2 || "00:00");
-    const s2 = timeToMinutes(p.saida2 || "00:00");
-
-    const trabalhadoDia = (s1 > e1 ? s1 - e1 : 0) + (s2 > e2 ? s2 - e2 : 0);
-
-    const dateObj = new Date(p.data.split('-').join('/'));
-    const diaSemana = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'][dateObj.getDay()];
-    const conf = jornada[diaSemana];
-
-    // Se o dia não estiver marcado como "ativo" na jornada, consideramos 0 de esperado
-    const esperadoDia = (conf?.ativo) 
-        ? (timeToMinutes(conf.saida) - timeToMinutes(conf.entrada) - timeToMinutes(conf.intervalo)) 
-        : 0;
-
-    // DEBUG DE CONFERÊNCIA (vai aparecer no F12)
-    console.log(`Dia: ${p.data} | Trab: ${trabalhadoDia}m | Esp: ${esperadoDia}m`);
-
-    // Lógica de cálculo
-    if (diaSemana === 'domingo' || !conf?.ativo) {
-        // Se não é dia de trabalho, tudo é extra 100%
-        totais.he100 += trabalhadoDia;
-    } else {
-        // Se é dia de trabalho, calculamos a diferença
-        if (trabalhadoDia > esperadoDia) {
-            totais.he50 += (trabalhadoDia - esperadoDia);
-        } else if (trabalhadoDia < esperadoDia && trabalhadoDia > 0) {
-            totais.falta += (esperadoDia - trabalhadoDia);
-        }
-    }
-});
-
-  // Cálculo financeiro
-  const valorHora = salarioBase / 220;
-  const vHE50 = ((totais.he50 / 60) * valorHora) * 1.5;
-  const vHE100 = ((totais.he100 / 60) * valorHora) * 2.0;
-  const vFalta = (totais.falta / 60) * valorHora;
-  const INSS = salarioBase * 0.075;
-  const liquido = (salarioBase + vHE50 + vHE100) - vFalta - INSS;
-
-  setCalculoRealizado({
-    funcionario, dataInicio, dataFim, base: salarioBase,
-    vHE50, vHE100, vFalta, inss: INSS, liquido,
-    totais: { 
-      he: (totais.he50 + totais.he100), 
-      falta: totais.falta 
-    }
-  });
-};
+    const salarioBase = Number(funcionario.salario) || 0;
+    const valorHora = salarioBase / 220; 
+    
+    const minutosExtrasTotais = totais.he50 + totais.he100;
+    const vHE50 = (minutosExtrasTotais / 60) * valorHora * 1.5;
+    const vFalta = (totais.falta / 60) * valorHora;
+    const inss = salarioBase * 0.075;
+    
+    setCalculoRealizado({
+      funcionario, dataInicio, dataFim, base: salarioBase,
+      vHE50: vHE50, vHE100: 0, vFalta: vFalta, inss: inss,
+      liquido: salarioBase + vHE50 - vFalta - inss,
+      totais: { he: minutosExtrasTotais, falta: totais.falta }
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -706,22 +632,36 @@ Object.values(pontosUnicos).forEach(p => {
           <Select label="Funcionário" value={selectedFuncId} onChange={e => setSelectedFuncId(e.target.value)} options={[{ label: '...', value: '' }, ...db.funcionarios.map(f => ({ label: f.nome, value: f.id }))]} />
           <Input label="De" type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} />
           <Input label="Até" type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} />
-          <Button icon={FileText} onClick={processarFolha}>Gerar</Button>
+          <Button icon={FileText} onClick={processarFolha}>Gerar Holerite</Button>
         </div>
       </Card>
+      
       {calculoRealizado && (
-        <Card className="max-w-3xl mx-auto p-0 overflow-hidden shadow-md">
-          <div className="bg-slate-800 text-white p-6"><h2 className="text-xl font-bold">Recibo de Pagamento</h2><p className="text-slate-300 text-sm">Ref: {formatDate(calculoRealizado.dataInicio)} a {formatDate(calculoRealizado.dataFim)}</p></div>
+        <Card className="max-w-3xl mx-auto p-0 overflow-hidden shadow-md border border-slate-200">
+          <div className="bg-slate-800 text-white p-6">
+            <h2 className="text-xl font-bold">Recibo de Pagamento</h2>
+            <p className="text-slate-300 text-sm">Ref: {formatDate(calculoRealizado.dataInicio)} a {formatDate(calculoRealizado.dataFim)}</p>
+          </div>
           <table className="w-full text-sm">
              <tbody className="divide-y divide-slate-100">
-               <tr><td className="px-6 py-4">Salário Base</td><td className="px-6 py-4 text-right text-green-600">{formatCurrency(calculoRealizado.base)}</td></tr>
-               <tr><td className="px-6 py-4 font-medium whitespace-nowrap">Horas Extras ({Math.floor(calculoRealizado.totais.he / 60)}h {calculoRealizado.totais.he % 60}m)</td><td className="px-6 py-4 text-right text-green-600 whitespace-nowrap">{formatCurrency(calculoRealizado.vHE50)}
-              </td>
-            </tr>
-               <tr><td className="px-6 py-4">Descontos / INSS</td><td className="px-6 py-4 text-right text-red-600">{formatCurrency(calculoRealizado.vFalta + calculoRealizado.inss)}</td></tr>
+               <tr>
+                 <td className="px-6 py-4 font-medium">Salário Base</td>
+                 <td className="px-6 py-4 text-right text-green-600 font-mono">{formatCurrency(calculoRealizado.base)}</td>
+               </tr>
+               <tr>
+                 <td className="px-6 py-4 font-medium">Horas Extras ({Math.floor(calculoRealizado.totais.he / 60)}h {calculoRealizado.totais.he % 60}m)</td>
+                 <td className="px-6 py-4 text-right text-green-600 font-mono">{formatCurrency(calculoRealizado.vHE50)}</td>
+               </tr>
+               <tr>
+                 <td className="px-6 py-4 font-medium">Descontos / INSS</td>
+                 <td className="px-6 py-4 text-right text-red-600 font-mono">{formatCurrency(calculoRealizado.vFalta + calculoRealizado.inss)}</td>
+               </tr>
              </tbody>
              <tfoot className="bg-slate-50 border-t-2 border-slate-200">
-               <tr><td className="px-6 py-4 font-bold text-right">Líquido a Receber:</td><td className="px-6 py-4 text-right text-2xl font-bold text-indigo-700">{formatCurrency(calculoRealizado.base + calculoRealizado.vHE50 + calculoRealizado.vHE100 - calculoRealizado.vFalta - calculoRealizado.inss)}</td></tr>
+               <tr>
+                 <td className="px-6 py-4 font-bold text-right">Líquido a Receber:</td>
+                 <td className="px-6 py-4 text-right text-2xl font-bold text-indigo-700 font-mono">{formatCurrency(calculoRealizado.liquido)}</td>
+               </tr>
              </tfoot>
           </table>
         </Card>
@@ -730,6 +670,9 @@ Object.values(pontosUnicos).forEach(p => {
   );
 };
 
+// ==========================================
+// MÓDULO: SEGURANÇA / BACKUP
+// ==========================================
 const Backup = () => {
   const { db } = useAppContext();
   return (
@@ -738,9 +681,9 @@ const Backup = () => {
       <Card className="text-center p-10 space-y-4 max-w-lg mx-auto">
         <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto"><Cloud size={32} /></div>
         <h3 className="text-lg font-bold text-slate-800">Sincronização Ativa</h3>
-        <p className="text-sm text-slate-500">Seus dados agora são salvos automaticamente no Google Cloud. O backup local não é mais necessário.</p>
+        <p className="text-sm text-slate-500">Seus dados agora são salvos automaticamente no Google Cloud Firestore.</p>
         <div className="p-4 bg-slate-50 rounded-lg text-xs text-slate-400 font-mono text-left overflow-hidden">
-          Registros na nuvem:<br/>
+          Registros na nuvem ativos:<br/>
           - {db.funcionarios.length} Funcionários<br/>
           - {db.pontos.length} Pontos Batidos
         </div>
@@ -750,7 +693,53 @@ const Backup = () => {
 };
 
 // ==========================================
-// LAYOUT & ROOT APP
+// MÓDULO: LOGIN SCREEN
+// ==========================================
+const LoginScreen = () => {
+  const { login, showToast } = useAppContext();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await login(auth, email, password);
+      showToast('Bem-vindo ao Portal!');
+    } catch (error) {
+      showToast('E-mail ou senha incorretos.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+        <div className="bg-indigo-600 p-8 text-center">
+          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
+            <Coffee size={32} className="text-indigo-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-white">BabáManager</h2>
+          <p className="text-indigo-200 text-sm mt-1">Acesso à Nuvem</p>
+        </div>
+        <div className="p-8">
+          <form onSubmit={handleLogin} className="space-y-5">
+            <Input label="E-mail" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+            <Input label="Senha" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+            <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-70">
+              {loading ? 'Autenticando...' : 'Entrar'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// LAYOUT PRINCIPAL & NAVEGAÇÃO
 // ==========================================
 const AppLayout = () => {
   const { currentRoute, setCurrentRoute, logout, dataSyncing } = useAppContext();
