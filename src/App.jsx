@@ -106,7 +106,7 @@ const CloudService = {
       return snap.docs.map(d => ({ id: d.id, ...d.data() }));
     }
   },
-  saveJornada: async (uid, funcId, jornadaData) => await setDoc(doc(doc(dbFirestore, 'jornadas', funcId)), { ...jornadaData, funcionarioId: funcId, userId: uid }),
+  saveJornada: async (uid, funcId, jornadaData) => await setDoc(doc(dbFirestore, 'jornadas', funcId), { ...jornadaData, funcionarioId: funcId, userId: uid }),
   
   getRegistrosPonto: async (uid, isAdmin, funcId) => {
     if (isAdmin) {
@@ -590,7 +590,7 @@ const JornadasTrabalho = () => {
 };
 
 // ==========================================
-// MÓDULO: CONTROLE DE PONTO (ADMIN)
+// MÓDULO: CONTROLE DE PONTO (ORDENAÇÃO POR DATA ATUALIZADA)
 // ==========================================
 const ControlePonto = () => {
   const { db, refreshData, showToast, currentUser } = useAppContext();
@@ -632,6 +632,9 @@ const ControlePonto = () => {
     }
   };
 
+  // ATUALIZAÇÃO DA ORDENAÇÃO: Alinha do mais recente (maior data) para o mais antigo (menor data)
+  const pontosOrdenados = [...db.pontos].sort((a, b) => b.data.localeCompare(a.data));
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-800">Lançamento de Ponto (Manual)</h1>
@@ -662,7 +665,7 @@ const ControlePonto = () => {
              <table className="w-full text-left text-sm min-w-[700px]">
                 <thead className="bg-slate-50 border-b"><tr><th className="px-4 py-3">Data</th><th className="px-4 py-3">Funcionário</th><th className="px-4 py-3 text-center">Início</th><th className="px-4 py-3 text-center">Fim</th><th className="px-4 py-3 text-right">Ações</th></tr></thead>
                 <tbody className="divide-y divide-slate-100">
-                  {db.pontos.slice().reverse().slice(0, 15).map((p, i) => (
+                  {pontosOrdenados.slice(0, 15).map((p, i) => (
                       <tr key={p.id || i} className="hover:bg-slate-50">
                         <td className="px-4 py-3">{formatDate(p.data)}</td>
                         <td className="px-4 py-3 font-medium">{db.funcionarios.find(f => f.id === p.funcionarioId)?.nome || 'Desconhecido'}</td>
@@ -737,7 +740,6 @@ const FolhaPagamento = () => {
       
       const esperado = (conf?.ativo) ? (timeToMinutes(conf.saida || "00:00") - timeToMinutes(conf.entrada || "00:00") - timeToMinutes(conf.intervalo || "00:00")) : 0;
 
-      // Se o dia não for de trabalho ativo na jornada ou for domingo, tudo vira 100%
       if (!conf?.ativo || diaSemana === 'domingo') {
           if (trabalhado > 0) totais.he100 += trabalhado;
       } else {
@@ -751,14 +753,10 @@ const FolhaPagamento = () => {
 
     const salarioBase = Number(funcionario.salario) || 0;
     
-    // BASE DINÂMICA: Descobre as horas semanais e calcula o divisor mensal real
     const horasSemanaisReal = calculateWeeklyHours(jornada);
     const divisorMensalDinamico = calculateMonthlyHours(horasSemanaisReal);
-    
-    // O valor da hora agora varia de acordo com o cadastro
     const valorHora = salarioBase / divisorMensalDinamico; 
     
-    // Separação cirúrgica dos adicionais financeiros (50% vs 100%)
     const vHE50 = (totais.he50 / 60) * valorHora * 1.5;
     const vHE100 = (totais.he100 / 60) * valorHora * 2.0;
     
@@ -806,7 +804,6 @@ const FolhaPagamento = () => {
                </tr>
                <tr>
                  <td className="px-6 py-4 font-medium">Horas Extras ({Math.floor(calculoRealizado.totais.he / 60)}h {calculoRealizado.totais.he % 60}m)</td>
-                 {/* Exibe o somatório das horas extras calculadas a 50% e 100% de forma transparente */}
                  <td className="px-6 py-4 text-right text-green-600 font-mono">{formatCurrency(calculoRealizado.vHE50 + calculoRealizado.vHE100)}</td>
                </tr>
                <tr>
@@ -844,7 +841,7 @@ const Backup = () => {
         <h3 className="text-lg font-bold text-slate-800">Sincronização Ativa</h3>
         <p className="text-sm text-slate-500">Seus dados agora são salvos automaticamente no Google Cloud Firestore.</p>
         <div className="p-4 bg-slate-50 rounded-lg text-xs text-slate-400 font-mono text-left overflow-hidden">
-          Registros na nuvem ativos:<br/>
+          Registros na nuvem activos:<br/>
           - {db.funcionarios.length} Funcionários<br/>
           - {db.pontos.length} Pontos Batidos
         </div>
